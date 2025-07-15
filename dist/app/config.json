@@ -1,0 +1,21 @@
+{
+    "name": "ClickGo Notepad",
+    "ver": 1,
+    "version": "0.1",
+    "author": "clickgo",
+
+    "controls": [
+        "/clickgo/control/common",
+        "/clickgo/control/form"
+    ],
+    "themes": [
+        "/clickgo/theme/light"
+    ],
+    "main": "/package/form/main",
+
+    "files": [
+        "/form/main.js",
+        "/form/main.xml",
+        "/app.js"
+    ]
+}

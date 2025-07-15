@@ -1,0 +1,20 @@
+{
+  "name": "clickgo-notepad",
+  "version": "0.0.1",
+  "description": "A lightweight text editor for web and desktop, primarily showcasing the ClickGo framework series.",
+  "keywords": [
+    "notepad"
+  ],
+  "main": "dist/index.js",
+  "author": "hanguoshuai",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "native": "electron ./dist/index"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "clickgo-native": "^0.0.11"
+  }
+}

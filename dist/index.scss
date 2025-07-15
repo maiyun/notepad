@@ -1,0 +1,67 @@
+@keyframes ani {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+#main {
+    position: fixed; left: 0; top: 0; width: 100%; height: 100%; user-select: none; display: flex; align-items: center; justify-content: center; color: #FFF;
+
+    --g-cubic:cubic-bezier(0.39, 0.575, 0.565, 1);
+
+    #box {
+        width: 502px; height: 302px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: hsl(166, 60%, 55%); overflow: hidden;
+
+        // --- hl ---
+
+        .hl-1 {
+            position: absolute; width: 280px; height: 280px; left: 0; bottom: 0; background: radial-gradient(at 0 80%, rgba(255, 255, 255, .2), rgba(255, 255, 255, 0) 60%);
+        }
+
+        // --- content ---
+
+        .title {
+            font-size: 55px; font-weight: lighter; text-align: center; padding-bottom: 40px;
+        }
+
+        .progress {
+            height: 3px; width: 10%; margin: 0 auto;
+
+            #block {
+                transition: width 7s ease-out; background: rgba(255, 255, 255, .5); height: 3px;
+            }
+        }
+
+        .close {
+            fill: rgba(255, 255, 255, .7); position: absolute; right: 0; top: 0; display: flex; align-items: center; justify-content: center; width: 35px; height: 35px; transition: all .3s var(--g-cubic);
+            &:hover {
+                background: rgba(0, 0 ,0 , .1); fill: #FFF;
+            }
+            &:active {
+                background: rgba(0, 0 ,0 , .2); fill: #FFF;
+            }
+        }
+
+        .logo {
+            position: absolute; left: 10px; top: 10px;
+        }
+
+        .bottom {
+            font-size: 12px; color: rgba(255, 255, 255, .7); position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center;
+
+            .loading {
+                width: 12px; height: 12px;
+                &::after {
+                    content: ' '; display: block; width: 100%; height: 100%; border-radius: 50%; border: 1px solid transparent; border-color: rgba(255, 255, 255, .7) transparent rgba(255, 255, 255, .7) transparent; animation: ani 1.2s linear infinite; box-sizing: border-box;
+                }
+            }
+
+            #text {
+                margin-left: 7px;
+            }
+        }
+    }
+}

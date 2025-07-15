@@ -1,0 +1,29 @@
+<form width="500" height="400" :title="(nosave ? '*' : '') + title" @min="onMin">
+    <layout direction="v" style="flex: 1;">
+        <menu>
+            <menu-item alt="F">
+                <template v-slot>File</template>
+                <template v-slot:pop>
+                    <menulist>
+                        <menulist-item alt="N" @click="toNew">New</menulist-item>
+                        <menulist-item alt="O" @click="open">Open</menulist-item>
+                        <menulist-split></menulist-split>
+                        <menulist-item alt="S" @click="save">Save</menulist-item>
+                        <menulist-item alt="A" @click="saveAs">Save As</menulist-item>
+                        <menulist-split></menulist-split>
+                        <menulist-item alt="Q" @click="exit">Exit</menulist-item>
+                    </menulist>
+                </template>
+            </menu-item>
+            <menu-item alt="V">
+                <template v-slot>View</template>
+                <template v-slot:pop>
+                    <menulist>
+                        <menulist-item alt="A" @click="about">About</menulist-item>
+                    </menulist>
+                </template>
+            </menu-item>
+        </menu>
+        <text type="multi" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" @input="onInput" @keydown.ctrl.s="save"></text>
+    </layout>
+</form>
