@@ -34,9 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const native = __importStar(require("clickgo-native"));
+const path = __importStar(require("path"));
 class Boot extends native.AbstractBoot {
     main() {
-        this.run('./index.html');
+        this.run(path.join(__dirname, '/index.html'));
     }
 }
 native.launcher(new Boot());

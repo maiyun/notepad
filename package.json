@@ -9,12 +9,34 @@
   "author": "hanguoshuai",
   "license": "AGPL-3.0",
   "scripts": {
-    "native": "electron ./dist/index"
+    "native": "electron ./dist/index",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "net.maiyun.clickgo-notepad",
+    "win": {
+      "target": ["portable"],
+      "icon": "doc/logo.ico"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/app/**/*",
+      "!dist/*.ts",
+      "!dist/*.scss"
+    ],
+    "directories": {
+      "output": "build"
+    }
   },
   "devDependencies": {
+    "@litert/loader": "^3.5.9",
+    "clickgo": "^3.16.20",
+    "electron": "^37.2.2",
+    "electron-builder": "^26.0.12",
+    "jszip": "^3.10.1",
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "clickgo-native": "^0.0.11"
+    "clickgo-native": "^0.0.16"
   }
 }

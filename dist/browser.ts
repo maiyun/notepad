@@ -19,7 +19,7 @@ class Boot extends clickgo.AbstractBoot {
     public async main(): Promise<void> {
         const block = document.getElementById('block')!;
         let first = true;
-        const taskId = await clickgo.task.run('app/', {
+        const taskId = await clickgo.task.run('app.cga', {
             'notify': false,
             'progress': (loaded, total) => {
                 if (first) {

@@ -62,7 +62,7 @@ class Boot extends clickgo.AbstractBoot {
             var _a;
             const block = document.getElementById('block');
             let first = true;
-            const taskId = yield clickgo.task.run('app/', {
+            const taskId = yield clickgo.task.run('app.cga', {
                 'notify': false,
                 'progress': (loaded, total) => {
                     if (first) {
