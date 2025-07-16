@@ -1,9 +1,10 @@
 import * as native from 'clickgo-native';
+import * as path from 'path';
 
 class Boot extends native.AbstractBoot {
 
     public main(): void {
-        this.run('./index.html');
+        this.run(path.join(__dirname, '/index.html'));
     }
 
 }
