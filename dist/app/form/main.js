@@ -145,7 +145,7 @@ class default_1 extends clickgo.form.AbstractForm {
     }
     about() {
         return __awaiter(this, void 0, void 0, function* () {
-            yield clickgo.form.dialog('ClickGo Notepad 0.0.1');
+            yield clickgo.form.dialog('ClickGo Notepad 0.0.2');
         });
     }
 }

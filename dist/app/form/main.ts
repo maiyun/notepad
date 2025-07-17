@@ -105,7 +105,7 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public async about() {
-        await clickgo.form.dialog('ClickGo Notepad 0.0.1');
+        await clickgo.form.dialog('ClickGo Notepad 0.0.2');
     }
 
 }
