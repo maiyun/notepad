@@ -3,13 +3,23 @@ A lightweight text editor for web and desktop, primarily showcasing the ClickGo 
 
 <p align="center"><img src="doc/form.png" alt="ClickGo Notpad"></p>
 
+You need to install [ClickGo Compiler](https://github.com/maiyun/clickgo-compiler) globally first.
+
+```sh
+npm install -g clickgo-compiler
+```
+
 ## Run
 
-Run `npm run native` to start the app.
+Run `clickgo --run ./dist/index` to start the app.
 
 ## Build
 
-Run `npm run build` to build the app.
+Run `clickgo --native` to build the app.
+
+### CN Mirror
+
+Run `clickgo --native --mirror cn`.
 
 ## Description
 This project is a demonstration of how to use *ClickGo Native* to compile *ClickGo* projects for *macOS*, *Windows*, and *Linux*. Please note: the project itself is not a production-ready application and serves no practical purpose beyond showcasing the build process.
