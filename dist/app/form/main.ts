@@ -14,7 +14,7 @@ export default class extends clickgo.form.AbstractForm {
     public text: string = '';
 
     public async onMin(): Promise<void> {
-        await clickgo.native.min();
+        await clickgo.native.min(this);
     }
 
     public onInput() {
@@ -43,7 +43,7 @@ export default class extends clickgo.form.AbstractForm {
         if (!paths) {
             return;
         }
-        const content = await clickgo.fs.getContent('/storage' + paths[0], {
+        const content = await clickgo.fs.getContent(this, '/storage' + paths[0], {
             'encoding': 'utf8',
         });
         if (!content) {
@@ -74,7 +74,7 @@ export default class extends clickgo.form.AbstractForm {
             this.file = path;
             this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
         }
-        await clickgo.fs.putContent('/storage' + this.file, this.text, {
+        await clickgo.fs.putContent(this, '/storage' + this.file, this.text, {
             'encoding': 'utf8',
         });
         this.nosave = false;
@@ -94,7 +94,7 @@ export default class extends clickgo.form.AbstractForm {
         }
         this.file = path;
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
-        await clickgo.fs.putContent('/storage' + this.file, this.text, {
+        await clickgo.fs.putContent(this, '/storage' + this.file, this.text, {
             'encoding': 'utf8',
         });
         this.nosave = false;
@@ -105,7 +105,7 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public async about() {
-        await clickgo.form.dialog('ClickGo Notepad 0.0.2');
+        await clickgo.form.dialog(this, 'ClickGo Notepad 1.0.0');
     }
 
 }

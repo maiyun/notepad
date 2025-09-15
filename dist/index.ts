@@ -1,10 +1,17 @@
 import * as native from 'clickgo-native';
-import * as path from 'path';
+
+// --- 仅执行 ---
+// --- clickgo --run ./dist/index ---
+// --- 编译 ---
+// --- clickgo --native --mirror cn ---
 
 class Boot extends native.AbstractBoot {
 
     public main(): void {
-        this.run(path.join(__dirname, '/index.html'));
+        this.run(native.path(import.meta.url, './index.html'), {
+            'frame': false,
+            'background': 'hsl(167, 62%, 54%)',
+        });
     }
 
 }

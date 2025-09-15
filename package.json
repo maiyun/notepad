@@ -1,22 +1,30 @@
 {
   "name": "clickgo-notepad",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "description": "A lightweight text editor for web and desktop, primarily showcasing the ClickGo framework series.",
+  "type": "module",
   "keywords": [
     "notepad"
   ],
-  "main": "dist/index.js",
+  "main": "./dist/index.js",
   "author": "MAIYUN.NET",
   "license": "AGPL-3.0",
-  "scripts": {
-    "native": "electron ./dist/index",
-    "build": "electron-builder --win"
-  },
   "build": {
     "appId": "net.maiyun.clickgo-notepad",
+    "productName": "ClickGo Notepad",
     "win": {
-      "target": ["portable", "msi"],
-      "icon": "doc/logo.ico"
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "icon": "./doc/logo.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "files": [
       "dist/**/*",
@@ -29,14 +37,10 @@
     }
   },
   "devDependencies": {
-    "@litert/loader": "^3.5.9",
-    "clickgo": "^3.16.20",
-    "electron": "^37.2.3",
-    "electron-builder": "^26.0.12",
-    "jszip": "^3.10.1",
-    "typescript": "^5.8.3"
+    "clickgo": "^4.0.5",
+    "typescript": "^5.9.2"
   },
   "dependencies": {
-    "clickgo-native": "^0.0.17"
+    "clickgo-native": "^1.0.3"
   }
 }

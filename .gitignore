@@ -1,10 +1,12 @@
-build/
 .vscode/
 .VSCodeCounter/
 .vs/
+.git/
 node_modules/
-.DS_Store
 .npmrc
-package-lock.json
+.DS_Store
 *.d.ts
 !/types/*.d.ts
+package-lock.json
+
+build/
