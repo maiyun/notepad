@@ -1,12 +1,9 @@
 import * as clickgo from 'clickgo';
 export default class extends clickgo.form.AbstractForm {
-    constructor() {
-        super(...arguments);
-        this.title = 'New file - ClickGo Notepad';
-        this.nosave = true;
-        this.file = '';
-        this.text = '';
-    }
+    title = 'New file - ClickGo Notepad';
+    nosave = true;
+    file = '';
+    text = '';
     async onMin() {
         await clickgo.native.min(this);
     }

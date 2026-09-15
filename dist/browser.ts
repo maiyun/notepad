@@ -1,14 +1,10 @@
 import * as clickgo from 'clickgo';
 
-// --- 打包 APP ---
-// --- clickgo -a ./dist/app
-// --- 打包启动文件 ---
-// --- clickgo -b ./dist/browser -g https://cdn.jsdelivr.net/npm/clickgo@4.0.7/dist/index.js ---
-
 class Boot extends clickgo.AbstractBoot {
 
     public async main(): Promise<void> {
         const block = document.getElementById('block')!;
+        const text = document.getElementById('text')!;
         let first = true;
         // --- 主题要先加载，防止应用出来了，还是原始主题 ---
         clickgo.theme.setMain('oklch(.78 .13 175)');
@@ -23,17 +19,26 @@ class Boot extends clickgo.AbstractBoot {
                 }
                 block.style.width = (per * 100).toString() + '%';
             },
+            initProgress: (loaded, total, _type, msg) => {
+                text.textContent = `[${loaded}/${total}] ${msg}`;
+            },
             'permissions': ['root'],
         });
-        console.log('taskId', taskId);
+        if (typeof taskId !== 'string') {
+            text.textContent = `Load failed (${taskId}).`;
+            return;
+        }
         document.getElementById('main')?.remove();
-        //*/
     }
 
     public onError(taskId: string, formId: string, error: Error, info: string): void {
+        const text = document.getElementById('text');
+        if (!text) {
+            return;
+        }
         console.log(taskId, formId, error, info);
     }
 
 }
 
-clickgo.launcher(new Boot());
+await clickgo.launcher(new Boot());

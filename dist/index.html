@@ -4,7 +4,14 @@
 <title>ClickGo Notepad</title>
 <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
-<script type="module" src="browser.pack.js"></script>
+<script type="importmap">
+{
+    "imports": {
+        "clickgo": "https://cdn.jsdelivr.net/npm/clickgo@6.1.2/dist/index.js"
+    }
+}
+</script>
+<script type="module" src="browser.js"></script>
 <link href="index.css" rel="stylesheet">
 </head>
 <body>

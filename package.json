@@ -9,6 +9,9 @@
   "main": "./dist/index.js",
   "author": "MAIYUN.NET",
   "license": "AGPL-3.0",
+  "scripts": {
+    "sass": "sass --watch dist/:dist/ --style compressed --no-source-map"
+  },
   "build": {
     "appId": "net.maiyun.clickgo-notepad",
     "productName": "ClickGo Notepad",
@@ -37,10 +40,10 @@
     }
   },
   "devDependencies": {
-    "clickgo": "^4.0.5",
-    "typescript": "^5.9.2"
+    "clickgo": "^6.1.2",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "clickgo-native": "^1.0.3"
+    "clickgo-native": "^2.0.1"
   }
 }
