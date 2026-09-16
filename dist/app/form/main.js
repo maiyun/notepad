@@ -4,10 +4,58 @@ export default class extends clickgo.form.AbstractForm {
     nosave = true;
     file = '';
     text = '';
+    selectionStart = 0;
+    selectionEnd = 0;
+    wordWrap = true;
     checkingUpdate = false;
     updateStatus = '';
     installingUpdate = false;
     _saving = false;
+    get characterCount() {
+        return Array.from(this.text).length;
+    }
+    get lineCount() {
+        return this.text.split(/\r\n|\r|\n/).length;
+    }
+    get selectionCount() {
+        const start = Math.max(0, Math.min(this.selectionStart, this.selectionEnd, this.text.length));
+        const end = Math.max(0, Math.min(Math.max(this.selectionStart, this.selectionEnd), this.text.length));
+        return Array.from(this.text.slice(start, end)).length;
+    }
+    get cursorLine() {
+        return this._cursorParts.length;
+    }
+    get cursorColumn() {
+        return Array.from(this._cursorParts[this._cursorParts.length - 1] ?? '').length + 1;
+    }
+    get lineEnding() {
+        if (this.text.includes('\r\n')) {
+            return 'CRLF';
+        }
+        if (this.text.includes('\r')) {
+            return 'CR';
+        }
+        return 'LF';
+    }
+    get documentStatus() {
+        if (this.updateStatus) {
+            return this.updateStatus;
+        }
+        if (this._saving) {
+            return 'Saving…';
+        }
+        return this.nosave ? 'Unsaved' : 'Saved';
+    }
+    get documentStatusType() {
+        if (this.updateStatus) {
+            return 'cg';
+        }
+        return this.nosave ? 'warning' : 'primary';
+    }
+    get _cursorParts() {
+        const offset = Math.max(0, Math.min(this.selectionEnd, this.text.length));
+        return this.text.slice(0, offset).split(/\r\n|\r|\n/);
+    }
     onMounted() {
         if (clickgo.isNative()) {
             this.checkUpdates(true).catch(() => {
@@ -20,6 +68,9 @@ export default class extends clickgo.form.AbstractForm {
             return;
         }
         this.checkingUpdate = true;
+        if (!automatic) {
+            this.updateStatus = 'Checking for updates…';
+        }
         try {
             if (!clickgo.isNative()) {
                 if (!automatic) {
@@ -151,6 +202,8 @@ export default class extends clickgo.form.AbstractForm {
         this.nosave = true;
         this.file = '';
         this.text = '';
+        this.selectionStart = 0;
+        this.selectionEnd = 0;
         this.title = 'New file - ClickGo Notepad';
     }
     async open() {
@@ -177,6 +230,8 @@ export default class extends clickgo.form.AbstractForm {
         this.nosave = false;
         this.file = paths[0];
         this.text = content;
+        this.selectionStart = 0;
+        this.selectionEnd = 0;
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
     }
     async save() {

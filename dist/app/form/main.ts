@@ -14,6 +14,14 @@ export default class extends clickgo.form.AbstractForm {
     /** --- 文本内容 --- */
     public text: string = '';
 
+    /** --- 当前选区，使用 Text 控件提供的原生双向绑定 --- */
+    public selectionStart = 0;
+
+    public selectionEnd = 0;
+
+    /** --- 是否自动换行 --- */
+    public wordWrap = true;
+
     /** --- 避免重复显示更新检测对话框 --- */
     public checkingUpdate = false;
 
@@ -25,6 +33,69 @@ export default class extends clickgo.form.AbstractForm {
 
     /** --- 避免保存操作并发覆盖文档状态 --- */
     private _saving = false;
+
+    /** --- 文档字符数，Unicode 扩展字符按一个字符计算 --- */
+    public get characterCount(): number {
+        return Array.from(this.text).length;
+    }
+
+    /** --- 文档总行数，空文档也有第一行 --- */
+    public get lineCount(): number {
+        return this.text.split(/\r\n|\r|\n/).length;
+    }
+
+    /** --- 当前选中的字符数 --- */
+    public get selectionCount(): number {
+        const start = Math.max(0, Math.min(this.selectionStart, this.selectionEnd, this.text.length));
+        const end = Math.max(0, Math.min(Math.max(this.selectionStart, this.selectionEnd), this.text.length));
+        return Array.from(this.text.slice(start, end)).length;
+    }
+
+    /** --- 光标所在行 --- */
+    public get cursorLine(): number {
+        return this._cursorParts.length;
+    }
+
+    /** --- 光标所在列，Unicode 扩展字符按一列计算 --- */
+    public get cursorColumn(): number {
+        return Array.from(this._cursorParts[this._cursorParts.length - 1] ?? '').length + 1;
+    }
+
+    /** --- 当前文档的换行符类型 --- */
+    public get lineEnding(): 'CRLF' | 'CR' | 'LF' {
+        if (this.text.includes('\r\n')) {
+            return 'CRLF';
+        }
+        if (this.text.includes('\r')) {
+            return 'CR';
+        }
+        return 'LF';
+    }
+
+    /** --- 状态栏左侧文本 --- */
+    public get documentStatus(): string {
+        if (this.updateStatus) {
+            return this.updateStatus;
+        }
+        if (this._saving) {
+            return 'Saving…';
+        }
+        return this.nosave ? 'Unsaved' : 'Saved';
+    }
+
+    /** --- 状态栏左侧语义颜色 --- */
+    public get documentStatusType(): 'primary' | 'warning' | 'cg' {
+        if (this.updateStatus) {
+            return 'cg';
+        }
+        return this.nosave ? 'warning' : 'primary';
+    }
+
+    /** --- 光标前的各行内容 --- */
+    private get _cursorParts(): string[] {
+        const offset = Math.max(0, Math.min(this.selectionEnd, this.text.length));
+        return this.text.slice(0, offset).split(/\r\n|\r|\n/);
+    }
 
     /**
      * --- 启动后自动检测，只有发现新版本时才提示 ---
@@ -48,6 +119,9 @@ export default class extends clickgo.form.AbstractForm {
             return;
         }
         this.checkingUpdate = true;
+        if (!automatic) {
+            this.updateStatus = 'Checking for updates…';
+        }
         try {
             if (!clickgo.isNative()) {
                 if (!automatic) {
@@ -188,6 +262,8 @@ export default class extends clickgo.form.AbstractForm {
         this.nosave = true;
         this.file = '';
         this.text = '';
+        this.selectionStart = 0;
+        this.selectionEnd = 0;
         this.title = 'New file - ClickGo Notepad';
     }
 
@@ -215,6 +291,8 @@ export default class extends clickgo.form.AbstractForm {
         this.nosave = false;
         this.file = paths[0];
         this.text = content;
+        this.selectionStart = 0;
+        this.selectionEnd = 0;
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
     }
 

@@ -19,6 +19,8 @@
                 <template v-slot>View</template>
                 <template v-slot:pop>
                     <menulist>
+                        <menulist-item type="check" v-model="wordWrap">Word Wrap</menulist-item>
+                        <menulist-split></menulist-split>
                         <!-- 桌面程序更新检测 -->
                         <menulist-item alt="Ctrl+U" :disabled="checkingUpdate" @click="checkUpdates()">Check for Updates</menulist-item>
                         <menulist-item alt="A" @click="about">About</menulist-item>
@@ -26,7 +28,16 @@
                 </template>
             </menu-item>
         </menu>
-        <text type="multi" :disabled="installingUpdate" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" @input="onInput" @keydown.ctrl.s="save"></text>
-        <label v-if="updateStatus">{{ updateStatus }}</label>
+        <text type="multi" :disabled="installingUpdate" :wrap="wordWrap" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" v-model:selection-start="selectionStart" v-model:selection-end="selectionEnd" @input="onInput" @keydown.ctrl.s="save"></text>
+        <statusbar separator="true">
+            <statusbar-item :grow="true" :type="documentStatusType">{{documentStatus}}</statusbar-item>
+            <template v-slot:right>
+                <statusbar-item v-if="selectionCount">Selected {{selectionCount}}</statusbar-item>
+                <statusbar-item>Ln {{cursorLine}}, Col {{cursorColumn}}</statusbar-item>
+                <statusbar-item>{{lineCount}} {{lineCount === 1 ? 'line' : 'lines'}}</statusbar-item>
+                <statusbar-item>{{characterCount}} {{characterCount === 1 ? 'char' : 'chars'}}</statusbar-item>
+                <statusbar-item>{{lineEnding}} · UTF-8</statusbar-item>
+            </template>
+        </statusbar>
     </layout>
 </form>
