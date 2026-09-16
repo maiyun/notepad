@@ -1,18 +1,12 @@
 {
     "name": "ClickGo Notepad",
-    "ver": 1,
-    "version": "1.0.0",
+    "ver": 2,
+    "version": "2.0.0",
     "author": "clickgo",
 
     "controls": [
         "/clickgo/control/common",
         "/clickgo/control/form"
     ],
-    "main": "/package/form/main",
-
-    "files": [
-        "/form/main.js",
-        "/form/main.xml",
-        "/app.js"
-    ]
+    "main": "/package/form/main"
 }

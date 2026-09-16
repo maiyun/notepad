@@ -10,11 +10,19 @@
   "author": "MAIYUN.NET",
   "license": "AGPL-3.0",
   "scripts": {
+    "build": "tsc && clickgo --app ./dist/app",
+    "check": "tsc --noEmit --pretty false",
     "sass": "sass --watch dist/:dist/ --style compressed --no-source-map"
   },
   "build": {
     "appId": "net.maiyun.clickgo-notepad",
     "productName": "ClickGo Notepad",
+    "publish": {
+      "provider": "github",
+      "owner": "maiyun",
+      "repo": "notepad",
+      "releaseType": "release"
+    },
     "win": {
       "target": [
         "portable",
@@ -40,10 +48,12 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^26.5.1",
     "clickgo": "^6.1.2",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "clickgo-native": "^2.0.1"
+    "clickgo-native": "^2.0.4",
+    "electron-updater": "^6.8.9"
   }
 }

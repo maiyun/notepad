@@ -4,6 +4,137 @@ export default class extends clickgo.form.AbstractForm {
     nosave = true;
     file = '';
     text = '';
+    checkingUpdate = false;
+    updateStatus = '';
+    installingUpdate = false;
+    _saving = false;
+    onMounted() {
+        if (clickgo.isNative()) {
+            this.checkUpdates(true).catch(() => {
+                return;
+            });
+        }
+    }
+    async checkUpdates(automatic = false) {
+        if (this.checkingUpdate) {
+            return;
+        }
+        this.checkingUpdate = true;
+        try {
+            if (!clickgo.isNative()) {
+                if (!automatic) {
+                    await clickgo.form.dialog(this, 'Update checks are available in the desktop app.');
+                }
+                return;
+            }
+            const result = await clickgo.native.invoke('notepad-check-updates');
+            if (!clickgo.form.get(this.formId)) {
+                return;
+            }
+            if (!result) {
+                if (!automatic) {
+                    await clickgo.form.dialog(this, 'Unable to check for updates. Please try again later.');
+                }
+                return;
+            }
+            if (automatic && (result.status !== 'available') && (result.status !== 'downloaded')) {
+                return;
+            }
+            let message;
+            switch (result.status) {
+                case 'available': {
+                    const action = await clickgo.form.dialog(this, {
+                        'title': 'Update Available',
+                        'content': clickgo.tool.escapeHTML(`Version ${result.version ?? result.currentVersion} is available. Current version: ${result.currentVersion}. Download it now?`),
+                        'buttons': ['Later', 'Download'],
+                    });
+                    if ((action !== 'Download') || !clickgo.form.get(this.formId)) {
+                        return;
+                    }
+                    this.updateStatus = 'Downloading update…';
+                    const download = await clickgo.native.invoke('notepad-download-update');
+                    this.updateStatus = '';
+                    if (!clickgo.form.get(this.formId)) {
+                        return;
+                    }
+                    if (download?.status !== 'downloaded') {
+                        await clickgo.form.dialog(this, 'Unable to download the update. Please check your connection and try again later.');
+                        return;
+                    }
+                    await this._installDownloadedUpdate();
+                    return;
+                }
+                case 'downloaded': {
+                    await this._installDownloadedUpdate();
+                    return;
+                }
+                case 'up-to-date': {
+                    message = `You are using the latest version (${result.currentVersion}).`;
+                    break;
+                }
+                case 'disabled': {
+                    message = 'Update checks are available in the installed desktop app. They are disabled in development and portable builds.';
+                    break;
+                }
+                default: {
+                    message = 'Unable to check for updates. Please check your connection and try again later.';
+                }
+            }
+            await clickgo.form.dialog(this, { 'title': 'Check for Updates', 'content': clickgo.tool.escapeHTML(message) });
+        }
+        catch {
+            if (!automatic) {
+                await clickgo.form.dialog(this, 'Unable to check for updates. Please try again later.');
+            }
+        }
+        finally {
+            this.updateStatus = this.installingUpdate ? 'Restarting to install update…' : '';
+            this.checkingUpdate = this.installingUpdate;
+        }
+    }
+    async _installDownloadedUpdate() {
+        const action = await clickgo.form.dialog(this, {
+            'title': 'Update Ready',
+            'content': 'The update has been downloaded. Restart and install it now?',
+            'buttons': ['Later', 'Restart and Install'],
+        });
+        if ((action !== 'Restart and Install') || !clickgo.form.get(this.formId)) {
+            return;
+        }
+        if (this.nosave && (this.text || this.file)) {
+            const save = await clickgo.form.dialog(this, {
+                'title': 'Unsaved Changes',
+                'content': 'Save your document before installing the update.',
+                'buttons': ['Cancel', 'Save'],
+            });
+            if ((save !== 'Save') || !await this.save()) {
+                return;
+            }
+        }
+        if (!clickgo.form.get(this.formId) || (this.nosave && (this.text || this.file)) || this._saving) {
+            return;
+        }
+        this.installingUpdate = true;
+        this.updateStatus = 'Restarting to install update…';
+        try {
+            let result = await clickgo.native.invoke('notepad-install-update');
+            while ((result?.status === 'restarting') && clickgo.form.get(this.formId)) {
+                await clickgo.tool.sleep(1000);
+                result = await clickgo.native.invoke('notepad-update-state');
+            }
+            if (clickgo.form.get(this.formId)) {
+                await clickgo.form.dialog(this, 'Unable to start the update installer. Your document is safe; please try again later.');
+            }
+        }
+        catch {
+            if (clickgo.form.get(this.formId)) {
+                await clickgo.form.dialog(this, 'Unable to start the update installer. Please try again later.');
+            }
+        }
+        finally {
+            this.installingUpdate = false;
+        }
+    }
     async onMin() {
         await clickgo.native.min(this);
     }
@@ -14,12 +145,18 @@ export default class extends clickgo.form.AbstractForm {
         this.nosave = true;
     }
     toNew() {
+        if (this.installingUpdate) {
+            return;
+        }
         this.nosave = true;
         this.file = '';
         this.text = '';
         this.title = 'New file - ClickGo Notepad';
     }
     async open() {
+        if (this.installingUpdate) {
+            return;
+        }
         const paths = await clickgo.native.open({
             'filters': [
                 {
@@ -34,7 +171,7 @@ export default class extends clickgo.form.AbstractForm {
         const content = await clickgo.fs.getContent(this, '/storage' + paths[0], {
             'encoding': 'utf8',
         });
-        if (!content) {
+        if ((content === null) || this.installingUpdate) {
             return;
         }
         this.nosave = false;
@@ -43,10 +180,57 @@ export default class extends clickgo.form.AbstractForm {
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
     }
     async save() {
+        if (this._saving || this.installingUpdate) {
+            return false;
+        }
         if (!this.nosave) {
+            return true;
+        }
+        this._saving = true;
+        try {
+            if (!this.file) {
+                const path = await clickgo.native.save({
+                    'filters': [
+                        {
+                            'name': 'Text Files',
+                            'accept': ['txt']
+                        }
+                    ]
+                });
+                if (!path) {
+                    return false;
+                }
+                this.file = path;
+                this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+            }
+            const file = this.file;
+            const text = this.text;
+            const saved = await clickgo.fs.putContent(this, '/storage' + file, text, {
+                'encoding': 'utf8',
+            });
+            if (!saved) {
+                await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
+                return false;
+            }
+            if ((this.file === file) && (this.text === text)) {
+                this.nosave = false;
+            }
+            return !this.nosave;
+        }
+        catch {
+            await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
+            return false;
+        }
+        finally {
+            this._saving = false;
+        }
+    }
+    async saveAs() {
+        if (this._saving || this.installingUpdate) {
             return;
         }
-        if (!this.file) {
+        this._saving = true;
+        try {
             const path = await clickgo.native.save({
                 'filters': [
                     {
@@ -60,32 +244,31 @@ export default class extends clickgo.form.AbstractForm {
             }
             this.file = path;
             this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+            this.nosave = true;
+            const file = this.file;
+            const text = this.text;
+            const saved = await clickgo.fs.putContent(this, '/storage' + file, text, {
+                'encoding': 'utf8',
+            });
+            if (!saved) {
+                await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
+                return;
+            }
+            if ((this.file === file) && (this.text === text)) {
+                this.nosave = false;
+            }
         }
-        await clickgo.fs.putContent(this, '/storage' + this.file, this.text, {
-            'encoding': 'utf8',
-        });
-        this.nosave = false;
-    }
-    async saveAs() {
-        const path = await clickgo.native.save({
-            'filters': [
-                {
-                    'name': 'Text Files',
-                    'accept': ['txt']
-                }
-            ]
-        });
-        if (!path) {
-            return;
+        catch {
+            await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
         }
-        this.file = path;
-        this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
-        await clickgo.fs.putContent(this, '/storage' + this.file, this.text, {
-            'encoding': 'utf8',
-        });
-        this.nosave = false;
+        finally {
+            this._saving = false;
+        }
     }
     exit() {
+        if (this.installingUpdate) {
+            return;
+        }
         this.close();
     }
     async about() {

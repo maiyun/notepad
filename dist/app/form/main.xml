@@ -1,7 +1,7 @@
 <form width="500" height="400" :title="(nosave ? '*' : '') + title" @min="onMin">
     <layout direction="v" style="flex: 1;">
         <menu>
-            <menu-item alt="F">
+            <menu-item alt="F" :disabled="installingUpdate">
                 <template v-slot>File</template>
                 <template v-slot:pop>
                     <menulist>
@@ -19,11 +19,14 @@
                 <template v-slot>View</template>
                 <template v-slot:pop>
                     <menulist>
+                        <!-- 桌面程序更新检测 -->
+                        <menulist-item alt="Ctrl+U" :disabled="checkingUpdate" @click="checkUpdates()">Check for Updates</menulist-item>
                         <menulist-item alt="A" @click="about">About</menulist-item>
                     </menulist>
                 </template>
             </menu-item>
         </menu>
-        <text type="multi" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" @input="onInput" @keydown.ctrl.s="save"></text>
+        <text type="multi" :disabled="installingUpdate" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" @input="onInput" @keydown.ctrl.s="save"></text>
+        <label v-if="updateStatus">{{ updateStatus }}</label>
     </layout>
 </form>

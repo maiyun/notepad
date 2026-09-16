@@ -1,0 +1,8 @@
+# Linux x64 AppImage example.
+# Example values only: replace the filename, hash, size and release date.
+version: 1.1.0
+files:
+  - url: ClickGo-Notepad-1.1.0.AppImage
+    sha512: REPLACE_WITH_BASE64_SHA512
+    size: 1
+releaseDate: '2026-09-15T00:00:00.000Z'
