@@ -393,7 +393,7 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public async about(): Promise<void> {
-        await clickgo.form.dialog(this, 'ClickGo Notepad 1.0.0');
+        await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');
     }
 
 }

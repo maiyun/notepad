@@ -1,13 +1,17 @@
 {
   "name": "clickgo-notepad",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A lightweight text editor for web and desktop, primarily showcasing the ClickGo framework series.",
   "type": "module",
   "keywords": [
     "notepad"
   ],
   "main": "./dist/index.js",
-  "author": "MAIYUN.NET",
+  "author": {
+    "name": "MAIYUN.NET",
+    "email": "maiyun.net@gmail.com"
+  },
+  "desktopName": "net.maiyun.clickgo-notepad.desktop",
   "license": "AGPL-3.0",
   "scripts": {
     "build": "tsc && clickgo --app ./dist/app",
@@ -36,6 +40,16 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64", "arm64"] },
+        { "target": "deb", "arch": ["x64", "arm64"] },
+        { "target": "rpm", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "./doc/logo.png",
+      "category": "Utility",
+      "syncDesktopName": true
     },
     "files": [
       "dist/**/*",
