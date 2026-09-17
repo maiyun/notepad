@@ -11,6 +11,7 @@ export default class extends clickgo.form.AbstractForm {
     updateStatus = '';
     installingUpdate = false;
     _saving = false;
+    closing = false;
     get characterCount() {
         return Array.from(this.text).length;
     }
@@ -64,7 +65,7 @@ export default class extends clickgo.form.AbstractForm {
         }
     }
     async checkUpdates(automatic = false) {
-        if (this.checkingUpdate) {
+        if (this.checkingUpdate || this.closing) {
             return;
         }
         this.checkingUpdate = true;
@@ -79,7 +80,7 @@ export default class extends clickgo.form.AbstractForm {
                 return;
             }
             const result = await clickgo.native.invoke('notepad-check-updates');
-            if (!clickgo.form.get(this.formId)) {
+            if (!clickgo.form.get(this.formId) || this.closing) {
                 return;
             }
             if (!result) {
@@ -149,7 +150,7 @@ export default class extends clickgo.form.AbstractForm {
             'content': 'The update has been downloaded. Restart and install it now?',
             'buttons': ['Later', 'Restart and Install'],
         });
-        if ((action !== 'Restart and Install') || !clickgo.form.get(this.formId)) {
+        if ((action !== 'Restart and Install') || !clickgo.form.get(this.formId) || this.closing) {
             return;
         }
         if (this.nosave && (this.text || this.file)) {
@@ -162,7 +163,7 @@ export default class extends clickgo.form.AbstractForm {
                 return;
             }
         }
-        if (!clickgo.form.get(this.formId) || (this.nosave && (this.text || this.file)) || this._saving) {
+        if (!clickgo.form.get(this.formId) || (this.nosave && (this.text || this.file)) || this._saving || this.closing) {
             return;
         }
         this.installingUpdate = true;
@@ -196,7 +197,7 @@ export default class extends clickgo.form.AbstractForm {
         this.nosave = true;
     }
     toNew() {
-        if (this.installingUpdate) {
+        if (this.installingUpdate || this.closing) {
             return;
         }
         this.nosave = true;
@@ -207,7 +208,7 @@ export default class extends clickgo.form.AbstractForm {
         this.title = 'New file - ClickGo Notepad';
     }
     async open() {
-        if (this.installingUpdate) {
+        if (this.installingUpdate || this.closing) {
             return;
         }
         const paths = await clickgo.native.open({
@@ -224,7 +225,7 @@ export default class extends clickgo.form.AbstractForm {
         const content = await clickgo.fs.getContent(this, '/storage' + paths[0], {
             'encoding': 'utf8',
         });
-        if ((content === null) || this.installingUpdate) {
+        if ((content === null) || this.installingUpdate || this.closing) {
             return;
         }
         this.nosave = false;
@@ -281,7 +282,7 @@ export default class extends clickgo.form.AbstractForm {
         }
     }
     async saveAs() {
-        if (this._saving || this.installingUpdate) {
+        if (this._saving || this.installingUpdate || this.closing) {
             return;
         }
         this._saving = true;
@@ -320,11 +321,37 @@ export default class extends clickgo.form.AbstractForm {
             this._saving = false;
         }
     }
-    exit() {
+    onClose(event) {
         if (this.installingUpdate) {
             return;
         }
-        this.close();
+        event.preventDefault();
+        this.exit().catch(() => { });
+    }
+    async exit() {
+        if (this.installingUpdate || this.closing || this._saving) {
+            return;
+        }
+        this.closing = true;
+        let closed = false;
+        try {
+            if (this.nosave && (this.text || this.file)) {
+                const answer = await clickgo.form.confirm(this, {
+                    'content': 'Save changes before closing? Choose No to discard changes.',
+                    'cancel': true,
+                });
+                if ((answer === 0) || ((answer === true) && !(await this.save()))) {
+                    return;
+                }
+            }
+            this.close();
+            closed = true;
+        }
+        finally {
+            if (!closed) {
+                this.closing = false;
+            }
+        }
     }
     async about() {
         await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');

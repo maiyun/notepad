@@ -6,10 +6,12 @@ class Boot extends native.AbstractBoot {
         this.on('notepad-download-update', () => lUpdate.downloadUpdate());
         this.on('notepad-install-update', () => lUpdate.installUpdate());
         this.on('notepad-update-state', () => lUpdate.getUpdateState());
-        this.run(native.path(import.meta.url, './index.html'), {
+        const options = {
             'frame': false,
+            'icon': native.path(import.meta.url, '../doc/logo.png'),
             'background': 'hsl(167, 62%, 54%)',
-        });
+        };
+        this.run(native.path(import.meta.url, './index.html'), options);
     }
 }
 native.launcher(new Boot());

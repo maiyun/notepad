@@ -2,9 +2,9 @@ import * as native from 'clickgo-native';
 import * as lUpdate from './update.js';
 
 // --- 仅执行 ---
-// --- clickgo --run ./dist/index ---
+// --- clickgo --run ./dist/index --mirror cn ---
 // --- 编译 ---
-// --- clickgo --native --mirror cn ---
+// --- clickgo --native --platform linux --mirror cn ---
 
 class Boot extends native.AbstractBoot {
 
@@ -14,10 +14,12 @@ class Boot extends native.AbstractBoot {
         this.on('notepad-download-update', (): Promise<lUpdate.IUpdateResult> => lUpdate.downloadUpdate());
         this.on('notepad-install-update', (): lUpdate.IUpdateResult => lUpdate.installUpdate());
         this.on('notepad-update-state', (): lUpdate.IUpdateResult => lUpdate.getUpdateState());
-        this.run(native.path(import.meta.url, './index.html'), {
+        const options = {
             'frame': false,
+            'icon': native.path(import.meta.url, '../doc/logo.png'),
             'background': 'hsl(167, 62%, 54%)',
-        });
+        };
+        this.run(native.path(import.meta.url, './index.html'), options);
     }
 
 }

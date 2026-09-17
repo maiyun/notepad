@@ -53,6 +53,7 @@
     },
     "files": [
       "dist/**/*",
+      "doc/logo.png",
       "!dist/app/**/*",
       "!dist/*.ts",
       "!dist/*.scss"
@@ -63,11 +64,11 @@
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
-    "clickgo": "^6.1.2",
+    "clickgo": "^6.1.4",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "clickgo-native": "^2.0.4",
+    "clickgo-native": "^2.0.6",
     "electron-updater": "^6.8.9"
   }
 }

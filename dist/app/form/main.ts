@@ -34,6 +34,9 @@ export default class extends clickgo.form.AbstractForm {
     /** --- 避免保存操作并发覆盖文档状态 --- */
     private _saving = false;
 
+    /** --- 避免重复关闭确认，确认期间锁住文档内容 --- */
+    public closing = false;
+
     /** --- 文档字符数，Unicode 扩展字符按一个字符计算 --- */
     public get characterCount(): number {
         return Array.from(this.text).length;
@@ -115,7 +118,7 @@ export default class extends clickgo.form.AbstractForm {
      * @returns 无
      */
     public async checkUpdates(automatic: boolean = false): Promise<void> {
-        if (this.checkingUpdate) {
+        if (this.checkingUpdate || this.closing) {
             return;
         }
         this.checkingUpdate = true;
@@ -130,7 +133,7 @@ export default class extends clickgo.form.AbstractForm {
                 return;
             }
             const result: IUpdateResult | undefined = await clickgo.native.invoke('notepad-check-updates');
-            if (!clickgo.form.get(this.formId)) {
+            if (!clickgo.form.get(this.formId) || this.closing) {
                 return;
             }
             if (!result) {
@@ -205,7 +208,7 @@ export default class extends clickgo.form.AbstractForm {
             'content': 'The update has been downloaded. Restart and install it now?',
             'buttons': ['Later', 'Restart and Install'],
         });
-        if ((action !== 'Restart and Install') || !clickgo.form.get(this.formId)) {
+        if ((action !== 'Restart and Install') || !clickgo.form.get(this.formId) || this.closing) {
             return;
         }
         if (this.nosave && (this.text || this.file)) {
@@ -218,7 +221,7 @@ export default class extends clickgo.form.AbstractForm {
                 return;
             }
         }
-        if (!clickgo.form.get(this.formId) || (this.nosave && (this.text || this.file)) || this._saving) {
+        if (!clickgo.form.get(this.formId) || (this.nosave && (this.text || this.file)) || this._saving || this.closing) {
             return;
         }
         this.installingUpdate = true;
@@ -256,7 +259,7 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public toNew(): void {
-        if (this.installingUpdate) {
+        if (this.installingUpdate || this.closing) {
             return;
         }
         this.nosave = true;
@@ -268,7 +271,7 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public async open(): Promise<void> {
-        if (this.installingUpdate) {
+        if (this.installingUpdate || this.closing) {
             return;
         }
         const paths = await clickgo.native.open({
@@ -285,7 +288,7 @@ export default class extends clickgo.form.AbstractForm {
         const content = await clickgo.fs.getContent(this, '/storage' + paths[0], {
             'encoding': 'utf8',
         });
-        if ((content === null) || this.installingUpdate) {
+        if ((content === null) || this.installingUpdate || this.closing) {
             return;
         }
         this.nosave = false;
@@ -345,7 +348,7 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public async saveAs(): Promise<void> {
-        if (this._saving || this.installingUpdate) {
+        if (this._saving || this.installingUpdate || this.closing) {
             return;
         }
         this._saving = true;
@@ -385,11 +388,39 @@ export default class extends clickgo.form.AbstractForm {
         }
     }
 
-    public exit(): void {
+    public onClose(event: clickgo.control.IFormCloseEvent): void {
+        // --- 更新安装前已经完成保存检查，不能阻断更新器退出 ---
         if (this.installingUpdate) {
             return;
         }
-        this.close();
+        event.preventDefault();
+        this.exit().catch(() => {});
+    }
+
+    public async exit(): Promise<void> {
+        if (this.installingUpdate || this.closing || this._saving) {
+            return;
+        }
+        this.closing = true;
+        let closed = false;
+        try {
+            if (this.nosave && (this.text || this.file)) {
+                const answer = await clickgo.form.confirm(this, {
+                    'content': 'Save changes before closing? Choose No to discard changes.',
+                    'cancel': true,
+                });
+                if ((answer === 0) || ((answer === true) && !(await this.save()))) {
+                    return;
+                }
+            }
+            this.close();
+            closed = true;
+        }
+        finally {
+            if (!closed) {
+                this.closing = false;
+            }
+        }
     }
 
     public async about(): Promise<void> {
