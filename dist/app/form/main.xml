@@ -9,7 +9,7 @@
                         <menulist-item alt="O" @click="open">Open</menulist-item>
                         <menulist-split></menulist-split>
                         <menulist-item alt="S" @click="save">Save</menulist-item>
-                        <menulist-item alt="A" @click="saveAs">Save As</menulist-item>
+                        <menulist-item alt="Ctrl+Shift+S" @click="saveAs">Save As</menulist-item>
                         <menulist-split></menulist-split>
                         <menulist-item alt="Q" @click="exit">Exit</menulist-item>
                     </menulist>
@@ -23,7 +23,7 @@
                         <menulist-split></menulist-split>
                         <!-- 桌面程序更新检测 -->
                         <menulist-item alt="Ctrl+U" :disabled="checkingUpdate" @click="checkUpdates()">Check for Updates</menulist-item>
-                        <menulist-item alt="A" @click="about">About</menulist-item>
+                        <menulist-item @click="about">About</menulist-item>
                     </menulist>
                 </template>
             </menu-item>

@@ -23,6 +23,10 @@ Run `clickgo --native` to build the app.
 
 Run `clickgo --native --mirror cn`.
 
+## Opening files
+
+In desktop builds, opening a local text-based file such as `.txt` or `.json` through the system, opening another file while Notepad is already running, and dropping a file onto the window all open the file in the existing editor. The file picker also provides an **All Files** option for source code and other plain-text formats. Replacing an edited document always asks whether to save, discard, or cancel. **Save As** uses `Ctrl+Shift+S`; `Ctrl+A` remains available for selecting all text.
+
 ## Update checks
 
 Installed desktop builds check for new versions at startup. Select **View → Check for Updates** (`Ctrl+U`) to check manually. When an update is available, choose **Download**, then **Restart and Install**. Unsaved documents must be saved before installation. Choose **Later** to continue working; check again to install an already downloaded update. Updates are disabled in web, development, and Windows portable builds.

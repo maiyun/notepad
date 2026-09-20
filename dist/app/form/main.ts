@@ -1,6 +1,18 @@
 import * as clickgo from 'clickgo';
 import type { IUpdateResult } from '../../update';
 
+/** --- 文本文件优先显示常用格式，同时允许用户处理其他纯文本文件 --- */
+const fileFilters = [
+    {
+        'name': 'Text Files',
+        'accept': ['txt', 'json'],
+    },
+    {
+        'name': 'All Files',
+        'accept': ['*'],
+    },
+];
+
 export default class extends clickgo.form.AbstractForm {
 
     public title = 'New file - ClickGo Notepad';
@@ -33,6 +45,9 @@ export default class extends clickgo.form.AbstractForm {
 
     /** --- 避免保存操作并发覆盖文档状态 --- */
     private _saving = false;
+
+    /** --- 避免并发读取 Native 交给应用的文件 --- */
+    private _openingFiles = false;
 
     /** --- 避免重复关闭确认，确认期间锁住文档内容 --- */
     public closing = false;
@@ -105,11 +120,14 @@ export default class extends clickgo.form.AbstractForm {
      * @returns 无
      */
     public onMounted(): void {
-        if (clickgo.isNative()) {
-            this.checkUpdates(true).catch((): void => {
-                return;
-            });
+        if (!clickgo.isNative()) {
+            return;
         }
+        clickgo.native.on(this, 'notepad-open-files', (): void => this._continueOpenFiles());
+        this._continueOpenFiles();
+        this.checkUpdates(true).catch((): void => {
+            return;
+        });
     }
 
     /**
@@ -271,32 +289,47 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     public async open(): Promise<void> {
-        if (this.installingUpdate || this.closing) {
+        if (this._openingFiles || this._saving || this.installingUpdate || this.closing) {
             return;
         }
-        const paths = await clickgo.native.open({
-            'filters': [
-                {
-                    'name': 'Text Files',
-                    'accept': ['txt']
-                }
-            ]
-        });
-        if (!paths) {
+        this._openingFiles = true;
+        try {
+            const paths = await clickgo.native.open({
+                'filters': fileFilters,
+            });
+            if (!paths) {
+                return;
+            }
+            await this._openFile(paths[0]);
+        }
+        finally {
+            this._openingFiles = false;
+            this._continueOpenFiles();
+        }
+    }
+
+    /**
+     * --- 读取 Native 在启动、文件关联或拖入时交给应用的文件 ---
+     * @returns 无
+     */
+    private async _openPendingFiles(): Promise<void> {
+        if (this._openingFiles || this._saving || this.installingUpdate || this.closing) {
             return;
         }
-        const content = await clickgo.fs.getContent(this, '/storage' + paths[0], {
-            'encoding': 'utf8',
-        });
-        if ((content === null) || this.installingUpdate || this.closing) {
-            return;
+        this._openingFiles = true;
+        try {
+            const paths: string[] | undefined = await clickgo.native.invoke('notepad-take-open-files');
+            if (!paths?.length) {
+                return;
+            }
+            if (!await this._openFile(paths[0])) {
+                return;
+            }
         }
-        this.nosave = false;
-        this.file = paths[0];
-        this.text = content;
-        this.selectionStart = 0;
-        this.selectionEnd = 0;
-        this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+        finally {
+            this._openingFiles = false;
+        }
+        this._continueOpenFiles();
     }
 
     public async save(): Promise<boolean> {
@@ -310,12 +343,7 @@ export default class extends clickgo.form.AbstractForm {
         try {
             if (!this.file) {
                 const path = await clickgo.native.save({
-                    'filters': [
-                        {
-                            'name': 'Text Files',
-                            'accept': ['txt']
-                        }
-                    ]
+                    'filters': fileFilters,
                 });
                 if (!path) {
                     return false;
@@ -344,6 +372,7 @@ export default class extends clickgo.form.AbstractForm {
         }
         finally {
             this._saving = false;
+            this._continueOpenFiles();
         }
     }
 
@@ -354,12 +383,7 @@ export default class extends clickgo.form.AbstractForm {
         this._saving = true;
         try {
             const path = await clickgo.native.save({
-                'filters': [
-                    {
-                        'name': 'Text Files',
-                        'accept': ['txt']
-                    }
-                ]
+                'filters': fileFilters,
             });
             if (!path) {
                 return;
@@ -385,6 +409,7 @@ export default class extends clickgo.form.AbstractForm {
         }
         finally {
             this._saving = false;
+            this._continueOpenFiles();
         }
     }
 
@@ -425,6 +450,63 @@ export default class extends clickgo.form.AbstractForm {
 
     public async about(): Promise<void> {
         await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');
+    }
+
+    /**
+     * --- 在不阻塞当前交互的情况下继续处理 Native 文件队列 ---
+     * @returns 无
+     */
+    private _continueOpenFiles(): void {
+        this._openPendingFiles().catch((): void => {
+            return;
+        });
+    }
+
+    /**
+     * --- 确认替换当前文档，避免文件关联或拖入覆盖未保存内容 ---
+     * @returns 是否可继续打开文件
+     */
+    private async _confirmOpenFile(): Promise<boolean> {
+        if (!this.nosave || (!this.text && !this.file)) {
+            return true;
+        }
+        const action = await clickgo.form.dialog(this, {
+            'title': 'Unsaved Changes',
+            'content': 'Save changes before opening another file?',
+            'buttons': ['Cancel', 'Discard', 'Save'],
+        });
+        if (action === 'Save') {
+            return this.save();
+        }
+        return action === 'Discard';
+    }
+
+    /**
+     * --- 读取指定文件并替换当前文档 ---
+     * @param file 不含 /storage/ 的文件路径
+     * @returns 是否已完成打开
+     */
+    private async _openFile(file: string): Promise<boolean> {
+        if (this.installingUpdate || this.closing || !await this._confirmOpenFile()) {
+            return false;
+        }
+        const content = await clickgo.fs.getContent(this, '/storage' + file, {
+            'encoding': 'utf8',
+        });
+        if (content === null) {
+            await clickgo.form.dialog(this, 'Unable to open the document. Please check that the file is still available.');
+            return false;
+        }
+        if (this.installingUpdate || this.closing) {
+            return false;
+        }
+        this.nosave = false;
+        this.file = file;
+        this.text = content;
+        this.selectionStart = 0;
+        this.selectionEnd = 0;
+        this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+        return true;
     }
 
 }

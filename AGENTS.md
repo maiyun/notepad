@@ -9,7 +9,7 @@
 - `dist/index.ts` 注册 `notepad-check-updates`、`notepad-download-update`、`notepad-install-update`、`notepad-update-state`；网页不能传入更新地址或安装文件。
 - `dist/app/form/main.ts` 挂载后发起非阻塞检测，自动检测只提示新版本；View 菜单可手动检测。用户确认下载后可暂缓安装，再次检测进入已下载包的安装确认。安装前要求保存未保存的文档，取消、保存失败或写入期间新增编辑均阻止安装。安装启动后锁定编辑，轮询安装错误以恢复重试入口。
 - 更新源由根 `package.json` 的 `build.publish` 配置，默认是当前 GitHub 仓库的 Releases。整包版本以根 `package.json.version` 为准，CGA 版本独立。
-- 开发运行、网页和 Windows portable 不更新。发布方需上传安装包、匹配元数据和辅助文件，macOS 还需签名及 ZIP；`yml/` 只用于示例，不能直接作为发布元数据上传。其他新建/打开动作的未保存文档提醒尚未实现。
+- 开发运行、网页和 Windows portable 不更新。发布方需上传安装包、匹配元数据和辅助文件，macOS 还需签名及 ZIP；`yml/` 只用于示例，不能直接作为发布元数据上传。新建文档的未保存内容提醒尚未实现。
 
 ## Native 窗口
 
@@ -17,3 +17,8 @@
 - 系统关闭（如 Alt+F4）依赖 ClickGo Native 的 `close-request` 桥接以及新版 ClickGo Form，发布时须同步更新 npm 依赖和 `dist/index.html` 的 CDN 运行库。
 - 首个 Form 的 `min-width="360"`、`min-height="240"` 由 ClickGo 同步至 Native 实体窗口；不是只限制网页内部样式。
 - `dist/index.ts` 的 Native `icon` 使用 `doc/logo.png`，该文件必须包含在 `build.files`；Linux 包也使用单张 `doc/logo.png`，由支持图标自动生成的新版全局 ClickGo Compiler 在打包时生成多尺寸桌面图标并清理临时文件，不维护项目内的图标集。`desktopName` 与 `linux.syncDesktopName` 保持一致。
+
+## 文件打开
+
+- `dist/index.ts` 通过 `openFiles` 和 `singleInstance` 统一接收文件关联、后续实例与窗口拖入的文件。Notepad 是单文档应用，每次请求只处理首个真实文件，不限扩展名，内容按 UTF-8 文本读取。
+- 菜单和 Native 文件请求共用 `_openFile()`；替换未保存文档前必须完成保存、放弃或取消流程。

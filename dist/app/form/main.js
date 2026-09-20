@@ -1,4 +1,14 @@
 import * as clickgo from 'clickgo';
+const fileFilters = [
+    {
+        'name': 'Text Files',
+        'accept': ['txt', 'json'],
+    },
+    {
+        'name': 'All Files',
+        'accept': ['*'],
+    },
+];
 export default class extends clickgo.form.AbstractForm {
     title = 'New file - ClickGo Notepad';
     nosave = true;
@@ -11,6 +21,7 @@ export default class extends clickgo.form.AbstractForm {
     updateStatus = '';
     installingUpdate = false;
     _saving = false;
+    _openingFiles = false;
     closing = false;
     get characterCount() {
         return Array.from(this.text).length;
@@ -58,11 +69,14 @@ export default class extends clickgo.form.AbstractForm {
         return this.text.slice(0, offset).split(/\r\n|\r|\n/);
     }
     onMounted() {
-        if (clickgo.isNative()) {
-            this.checkUpdates(true).catch(() => {
-                return;
-            });
+        if (!clickgo.isNative()) {
+            return;
         }
+        clickgo.native.on(this, 'notepad-open-files', () => this._continueOpenFiles());
+        this._continueOpenFiles();
+        this.checkUpdates(true).catch(() => {
+            return;
+        });
     }
     async checkUpdates(automatic = false) {
         if (this.checkingUpdate || this.closing) {
@@ -208,32 +222,42 @@ export default class extends clickgo.form.AbstractForm {
         this.title = 'New file - ClickGo Notepad';
     }
     async open() {
-        if (this.installingUpdate || this.closing) {
+        if (this._openingFiles || this._saving || this.installingUpdate || this.closing) {
             return;
         }
-        const paths = await clickgo.native.open({
-            'filters': [
-                {
-                    'name': 'Text Files',
-                    'accept': ['txt']
-                }
-            ]
-        });
-        if (!paths) {
+        this._openingFiles = true;
+        try {
+            const paths = await clickgo.native.open({
+                'filters': fileFilters,
+            });
+            if (!paths) {
+                return;
+            }
+            await this._openFile(paths[0]);
+        }
+        finally {
+            this._openingFiles = false;
+            this._continueOpenFiles();
+        }
+    }
+    async _openPendingFiles() {
+        if (this._openingFiles || this._saving || this.installingUpdate || this.closing) {
             return;
         }
-        const content = await clickgo.fs.getContent(this, '/storage' + paths[0], {
-            'encoding': 'utf8',
-        });
-        if ((content === null) || this.installingUpdate || this.closing) {
-            return;
+        this._openingFiles = true;
+        try {
+            const paths = await clickgo.native.invoke('notepad-take-open-files');
+            if (!paths?.length) {
+                return;
+            }
+            if (!await this._openFile(paths[0])) {
+                return;
+            }
         }
-        this.nosave = false;
-        this.file = paths[0];
-        this.text = content;
-        this.selectionStart = 0;
-        this.selectionEnd = 0;
-        this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+        finally {
+            this._openingFiles = false;
+        }
+        this._continueOpenFiles();
     }
     async save() {
         if (this._saving || this.installingUpdate) {
@@ -246,12 +270,7 @@ export default class extends clickgo.form.AbstractForm {
         try {
             if (!this.file) {
                 const path = await clickgo.native.save({
-                    'filters': [
-                        {
-                            'name': 'Text Files',
-                            'accept': ['txt']
-                        }
-                    ]
+                    'filters': fileFilters,
                 });
                 if (!path) {
                     return false;
@@ -279,6 +298,7 @@ export default class extends clickgo.form.AbstractForm {
         }
         finally {
             this._saving = false;
+            this._continueOpenFiles();
         }
     }
     async saveAs() {
@@ -288,12 +308,7 @@ export default class extends clickgo.form.AbstractForm {
         this._saving = true;
         try {
             const path = await clickgo.native.save({
-                'filters': [
-                    {
-                        'name': 'Text Files',
-                        'accept': ['txt']
-                    }
-                ]
+                'filters': fileFilters,
             });
             if (!path) {
                 return;
@@ -319,6 +334,7 @@ export default class extends clickgo.form.AbstractForm {
         }
         finally {
             this._saving = false;
+            this._continueOpenFiles();
         }
     }
     onClose(event) {
@@ -355,5 +371,46 @@ export default class extends clickgo.form.AbstractForm {
     }
     async about() {
         await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');
+    }
+    _continueOpenFiles() {
+        this._openPendingFiles().catch(() => {
+            return;
+        });
+    }
+    async _confirmOpenFile() {
+        if (!this.nosave || (!this.text && !this.file)) {
+            return true;
+        }
+        const action = await clickgo.form.dialog(this, {
+            'title': 'Unsaved Changes',
+            'content': 'Save changes before opening another file?',
+            'buttons': ['Cancel', 'Discard', 'Save'],
+        });
+        if (action === 'Save') {
+            return this.save();
+        }
+        return action === 'Discard';
+    }
+    async _openFile(file) {
+        if (this.installingUpdate || this.closing || !await this._confirmOpenFile()) {
+            return false;
+        }
+        const content = await clickgo.fs.getContent(this, '/storage' + file, {
+            'encoding': 'utf8',
+        });
+        if (content === null) {
+            await clickgo.form.dialog(this, 'Unable to open the document. Please check that the file is still available.');
+            return false;
+        }
+        if (this.installingUpdate || this.closing) {
+            return false;
+        }
+        this.nosave = false;
+        this.file = file;
+        this.text = content;
+        this.selectionStart = 0;
+        this.selectionEnd = 0;
+        this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+        return true;
     }
 }
