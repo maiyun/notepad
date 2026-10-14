@@ -1,5 +1,6 @@
-// Run after TypeScript compilation: node --experimental-vm-modules test/close.mjs
+// Run after TypeScript compilation: node --experimental-vm-modules dist/abox/test/close.mjs
 import assert from 'node:assert/strict';
+import * as textApi from '../../app/lib/text.js';
 import { readFile } from 'node:fs/promises';
 import { SourceTextModule, SyntheticModule } from 'node:vm';
 
@@ -15,13 +16,23 @@ const clickgo = new SyntheticModule(['form', 'native', 'fs'], function() {
     this.setExport('native', {});
     this.setExport('fs', {});
 });
-const mod = new SourceTextModule(await readFile(new URL('../dist/app/form/main.js', import.meta.url), 'utf8'));
-await mod.link(() => clickgo);
+const mod = new SourceTextModule(await readFile(new URL('../../app/form/main.js', import.meta.url), 'utf8'));
+const textModule = new SyntheticModule(Object.keys(textApi), function() {
+    for (const [name, value] of Object.entries(textApi)) { this.setExport(name, value); }
+});
+const ai = new SyntheticModule(['default'], function() {
+    this.setExport('default', class {});
+});
+const commands = new SyntheticModule(['register'], function() {
+    this.setExport('register', () => {});
+});
+await mod.link(name => name === 'clickgo' ? clickgo : name.endsWith('/text') ? textModule : name.endsWith('/command') ? commands : ai);
 await mod.evaluate();
 const Main = mod.namespace.default;
 const dirty = () => {
     const form = new Main();
     form.text = 'unsaved';
+    form.onInput();
     return form;
 };
 
@@ -73,7 +84,7 @@ const beforeConcurrent = confirms;
 const pending = concurrent.exit();
 assert.equal(concurrent.closing, true);
 await concurrent.exit();
-concurrent.toNew();
+await concurrent.newDocument();
 assert.equal(concurrent.text, 'unsaved');
 assert.equal(confirms, beforeConcurrent + 1);
 resolve(0);

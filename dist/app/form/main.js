@@ -1,4 +1,6 @@
 import * as clickgo from 'clickgo';
+import aiFrm from './ai/ai';
+import * as lCommand from '../lib/command';
 const fileFilters = [
     {
         'name': 'Text Files',
@@ -11,9 +13,11 @@ const fileFilters = [
 ];
 export default class extends clickgo.form.AbstractForm {
     title = 'New file - ClickGo Notepad';
-    nosave = true;
+    access = { 'openFiles': [] };
+    nosave = false;
     file = '';
     text = '';
+    _observedText = '';
     selectionStart = 0;
     selectionEnd = 0;
     wordWrap = true;
@@ -21,8 +25,18 @@ export default class extends clickgo.form.AbstractForm {
     updateStatus = '';
     installingUpdate = false;
     _saving = false;
-    _openingFiles = false;
+    openingFiles = false;
+    revision = 0;
     closing = false;
+    get commandDisabledReason() {
+        if (this.installingUpdate || this.closing) {
+            return 'The document is closing or an update is being installed.';
+        }
+        if (this._saving || this.openingFiles || this.loading) {
+            return 'A document operation is in progress.';
+        }
+        return true;
+    }
     get characterCount() {
         return Array.from(this.text).length;
     }
@@ -56,7 +70,10 @@ export default class extends clickgo.form.AbstractForm {
         if (this._saving) {
             return 'Saving…';
         }
-        return this.nosave ? 'Unsaved' : 'Saved';
+        if (this.nosave) {
+            return 'Unsaved';
+        }
+        return this.file ? 'Saved' : 'Ready';
     }
     get documentStatusType() {
         if (this.updateStatus) {
@@ -69,14 +86,30 @@ export default class extends clickgo.form.AbstractForm {
         return this.text.slice(0, offset).split(/\r\n|\r|\n/);
     }
     onMounted() {
+        lCommand.register(this);
         if (!clickgo.isNative()) {
             return;
         }
-        clickgo.native.on(this, 'notepad-open-files', () => this._continueOpenFiles());
+        clickgo.native.onUpdateState(this, (state) => {
+            if (state.status === 'downloading' && this.checkingUpdate) {
+                this.updateStatus = state.progress ? `Downloading update… ${Math.floor(state.progress.percent)}%` : 'Downloading update…';
+            }
+            if (state.errorCode === 'install-failed') {
+                void this._updateInstallFailed();
+            }
+        });
         this._continueOpenFiles();
         this.checkUpdates(true).catch(() => {
             return;
         });
+    }
+    onNativeOpenFiles(paths) {
+        const file = paths[0];
+        if (!file || this.access['openFiles'].includes(file)) {
+            return;
+        }
+        this.access['openFiles'].push(file);
+        this._continueOpenFiles();
     }
     async checkUpdates(automatic = false) {
         if (this.checkingUpdate || this.closing) {
@@ -93,7 +126,7 @@ export default class extends clickgo.form.AbstractForm {
                 }
                 return;
             }
-            const result = await clickgo.native.invoke('notepad-check-updates');
+            const result = await clickgo.native.checkUpdates(this);
             if (!clickgo.form.get(this.formId) || this.closing) {
                 return;
             }
@@ -118,12 +151,12 @@ export default class extends clickgo.form.AbstractForm {
                         return;
                     }
                     this.updateStatus = 'Downloading update…';
-                    const download = await clickgo.native.invoke('notepad-download-update');
+                    const download = await clickgo.native.downloadUpdate(this);
                     this.updateStatus = '';
                     if (!clickgo.form.get(this.formId)) {
                         return;
                     }
-                    if (download?.status !== 'downloaded') {
+                    if (!download || download.status !== 'downloaded') {
                         await clickgo.form.dialog(this, 'Unable to download the update. Please check your connection and try again later.');
                         return;
                     }
@@ -183,159 +216,198 @@ export default class extends clickgo.form.AbstractForm {
         this.installingUpdate = true;
         this.updateStatus = 'Restarting to install update…';
         try {
-            let result = await clickgo.native.invoke('notepad-install-update');
-            while ((result?.status === 'restarting') && clickgo.form.get(this.formId)) {
-                await clickgo.tool.sleep(1000);
-                result = await clickgo.native.invoke('notepad-update-state');
-            }
-            if (clickgo.form.get(this.formId)) {
-                await clickgo.form.dialog(this, 'Unable to start the update installer. Your document is safe; please try again later.');
+            const result = await clickgo.native.installUpdate(this);
+            if (!result || result.status !== 'restarting') {
+                await this._updateInstallFailed();
             }
         }
         catch {
-            if (clickgo.form.get(this.formId)) {
-                await clickgo.form.dialog(this, 'Unable to start the update installer. Please try again later.');
-            }
+            await this._updateInstallFailed();
         }
-        finally {
-            this.installingUpdate = false;
+    }
+    async _updateInstallFailed() {
+        if (!this.installingUpdate) {
+            return;
+        }
+        this.installingUpdate = false;
+        this.checkingUpdate = false;
+        this.updateStatus = '';
+        if (clickgo.form.get(this.formId)) {
+            await clickgo.form.dialog(this, 'Unable to start the update installer. Your document is safe; please try again later.');
         }
     }
     async onMin() {
         await clickgo.native.min(this);
     }
     onInput() {
-        if (this.nosave) {
+        if (this.text === this._observedText) {
             return;
         }
+        this._observedText = this.text;
+        ++this.revision;
         this.nosave = true;
+    }
+    editDocument(start, end, text) {
+        const next = this.text.slice(0, start) + text + this.text.slice(end);
+        if (next !== this.text) {
+            this.text = next;
+            this.onInput();
+        }
+        this.selectionStart = start + text.length;
+        this.selectionEnd = this.selectionStart;
     }
     toNew() {
-        if (this.installingUpdate || this.closing) {
-            return;
-        }
-        this.nosave = true;
-        this.file = '';
-        this.text = '';
-        this.selectionStart = 0;
-        this.selectionEnd = 0;
-        this.title = 'New file - ClickGo Notepad';
+        return clickgo.command.execute(this, 'document.new', { 'expectedRevision': this.revision });
     }
-    async open() {
-        if (this._openingFiles || this._saving || this.installingUpdate || this.closing) {
-            return;
+    async newDocument(signal) {
+        if (this.commandDisabledReason !== true || signal?.aborted) {
+            return false;
         }
-        this._openingFiles = true;
+        this.openingFiles = true;
         try {
-            const paths = await clickgo.native.open({
-                'filters': fileFilters,
-            });
-            if (!paths) {
-                return;
+            if (!await this._confirmOpenFile('creating a new document', signal) || signal?.aborted) {
+                return false;
             }
-            await this._openFile(paths[0]);
+            this.nosave = false;
+            this.file = '';
+            this.text = '';
+            this._observedText = '';
+            this.selectionStart = 0;
+            this.selectionEnd = 0;
+            this.title = 'New file - ClickGo Notepad';
+            ++this.revision;
+            return true;
         }
         finally {
-            this._openingFiles = false;
+            this.openingFiles = false;
+            this._continueOpenFiles();
+        }
+    }
+    open() {
+        return clickgo.command.execute(this, 'document.open', { 'expectedRevision': this.revision });
+    }
+    async openDocument(path, signal) {
+        if (this.commandDisabledReason !== true || signal?.aborted) {
+            return false;
+        }
+        this.openingFiles = true;
+        try {
+            if (!path) {
+                const paths = await clickgo.native.open({ 'filters': fileFilters });
+                path = paths?.[0];
+            }
+            if (!path || signal?.aborted) {
+                return false;
+            }
+            return await this._openFile(path, signal);
+        }
+        finally {
+            this.openingFiles = false;
             this._continueOpenFiles();
         }
     }
     async _openPendingFiles() {
-        if (this._openingFiles || this._saving || this.installingUpdate || this.closing) {
+        if (this.commandDisabledReason !== true) {
             return;
         }
-        this._openingFiles = true;
+        const file = this.access['openFiles'].shift();
+        if (!file) {
+            return;
+        }
+        this.openingFiles = true;
         try {
-            const paths = await clickgo.native.invoke('notepad-take-open-files');
-            if (!paths?.length) {
-                return;
-            }
-            if (!await this._openFile(paths[0])) {
-                return;
-            }
+            await this._openFile(file);
         }
         finally {
-            this._openingFiles = false;
+            this.openingFiles = false;
+            this._continueOpenFiles();
         }
-        this._continueOpenFiles();
     }
-    async save() {
-        if (this._saving || this.installingUpdate) {
+    saveCommand() {
+        return clickgo.command.execute(this, 'document.save', { 'expectedRevision': this.revision });
+    }
+    saveAs() {
+        return clickgo.command.execute(this, 'document.saveAs', { 'expectedRevision': this.revision });
+    }
+    async save(signal) {
+        if (this._saving || this.installingUpdate || signal?.aborted) {
             return false;
         }
-        if (!this.nosave) {
+        if (!this.nosave && this.file) {
             return true;
         }
         this._saving = true;
+        const revision = this.revision;
         try {
-            if (!this.file) {
-                const path = await clickgo.native.save({
-                    'filters': fileFilters,
-                });
-                if (!path) {
-                    return false;
-                }
-                this.file = path;
-                this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
+            const path = this.file || await clickgo.native.save({ 'filters': fileFilters });
+            if (!path || signal?.aborted || revision !== this.revision) {
+                return false;
             }
-            const file = this.file;
-            const text = this.text;
-            const saved = await clickgo.fs.putContent(this, '/storage' + file, text, {
-                'encoding': 'utf8',
-            });
+            return await this._writeDocument(path, signal);
+        }
+        finally {
+            this._saving = false;
+            this._continueOpenFiles();
+        }
+    }
+    async saveDocumentAs(path, signal) {
+        if (this.commandDisabledReason !== true || signal?.aborted) {
+            return false;
+        }
+        this._saving = true;
+        const revision = this.revision;
+        try {
+            path ??= await clickgo.native.save({ 'filters': fileFilters }) || undefined;
+            if (!path || signal?.aborted || revision !== this.revision) {
+                return false;
+            }
+            return await this._writeDocument(path, signal);
+        }
+        finally {
+            this._saving = false;
+            this._continueOpenFiles();
+        }
+    }
+    async _writeDocument(path, signal) {
+        const text = this.text;
+        if (signal?.aborted) {
+            return false;
+        }
+        try {
+            const saved = await clickgo.fs.putContent(this, `/storage${path}`, text, { 'encoding': 'utf8' });
             if (!saved) {
                 await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
                 return false;
             }
-            if ((this.file === file) && (this.text === text)) {
-                this.nosave = false;
-            }
-            return !this.nosave;
         }
         catch {
             await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
             return false;
         }
-        finally {
-            this._saving = false;
-            this._continueOpenFiles();
+        if (this.file !== path) {
+            ++this.revision;
         }
+        this.file = path;
+        this.title = `${path.slice(path.lastIndexOf('/') + 1)} - ClickGo Notepad`;
+        this.nosave = this.text !== text;
+        return !this.nosave;
     }
-    async saveAs() {
-        if (this._saving || this.installingUpdate || this.closing) {
+    async aiAccess() {
+        if (this.commandDisabledReason !== true) {
             return;
         }
-        this._saving = true;
-        try {
-            const path = await clickgo.native.save({
-                'filters': fileFilters,
-            });
-            if (!path) {
-                return;
-            }
-            this.file = path;
-            this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';
-            this.nosave = true;
-            const file = this.file;
-            const text = this.text;
-            const saved = await clickgo.fs.putContent(this, '/storage' + file, text, {
-                'encoding': 'utf8',
-            });
-            if (!saved) {
-                await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
-                return;
-            }
-            if ((this.file === file) && (this.text === text)) {
-                this.nosave = false;
-            }
-        }
-        catch {
-            await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
-        }
-        finally {
-            this._saving = false;
-            this._continueOpenFiles();
-        }
+        this.loading = true;
+        const area = clickgo.core.getAvailArea();
+        const form = await clickgo.form.create(this, aiFrm, {
+            'width': Math.min(640, area.width - 20),
+            'height': Math.min(500, area.height - 20),
+        });
+        this.loading = false;
+        await form.showDialog();
+    }
+    async toggleWordWrap(event) {
+        event.preventDefault();
+        await clickgo.command.execute(this, 'editor.wordWrap', { 'enabled': !this.wordWrap });
     }
     onClose(event) {
         if (this.installingUpdate) {
@@ -345,7 +417,7 @@ export default class extends clickgo.form.AbstractForm {
         this.exit().catch(() => { });
     }
     async exit() {
-        if (this.installingUpdate || this.closing || this._saving) {
+        if (this.installingUpdate || this.closing || this._saving || this.openingFiles) {
             return;
         }
         this.closing = true;
@@ -373,26 +445,35 @@ export default class extends clickgo.form.AbstractForm {
         await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');
     }
     _continueOpenFiles() {
+        if (!clickgo.isNative()) {
+            return;
+        }
         this._openPendingFiles().catch(() => {
             return;
         });
     }
-    async _confirmOpenFile() {
+    async _confirmOpenFile(operation = 'opening another file', signal) {
         if (!this.nosave || (!this.text && !this.file)) {
             return true;
         }
         const action = await clickgo.form.dialog(this, {
             'title': 'Unsaved Changes',
-            'content': 'Save changes before opening another file?',
+            'content': `Save changes before ${operation}?`,
             'buttons': ['Cancel', 'Discard', 'Save'],
         });
+        if (signal?.aborted) {
+            return false;
+        }
         if (action === 'Save') {
-            return this.save();
+            return this.save(signal);
         }
         return action === 'Discard';
     }
-    async _openFile(file) {
-        if (this.installingUpdate || this.closing || !await this._confirmOpenFile()) {
+    async _openFile(file, signal) {
+        if (this.installingUpdate || this.closing || signal?.aborted) {
+            return false;
+        }
+        if (!await this._confirmOpenFile('opening another file', signal) || signal?.aborted) {
             return false;
         }
         const content = await clickgo.fs.getContent(this, '/storage' + file, {
@@ -402,12 +483,14 @@ export default class extends clickgo.form.AbstractForm {
             await clickgo.form.dialog(this, 'Unable to open the document. Please check that the file is still available.');
             return false;
         }
-        if (this.installingUpdate || this.closing) {
+        if (this.installingUpdate || this.closing || signal?.aborted) {
             return false;
         }
+        ++this.revision;
         this.nosave = false;
         this.file = file;
         this.text = content;
+        this._observedText = content;
         this.selectionStart = 0;
         this.selectionEnd = 0;
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';

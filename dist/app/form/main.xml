@@ -5,11 +5,11 @@
                 <template v-slot>File</template>
                 <template v-slot:pop>
                     <menulist>
-                        <menulist-item alt="N" @click="toNew">New</menulist-item>
-                        <menulist-item alt="O" @click="open">Open</menulist-item>
+                        <menulist-item alt="Ctrl+N" :disabled="commandDisabledReason !== true" @click="toNew">New</menulist-item>
+                        <menulist-item alt="Ctrl+O" :disabled="commandDisabledReason !== true" @click="open">Open</menulist-item>
                         <menulist-split></menulist-split>
-                        <menulist-item alt="S" @click="save">Save</menulist-item>
-                        <menulist-item alt="Ctrl+Shift+S" @click="saveAs">Save As</menulist-item>
+                        <menulist-item alt="Ctrl+S" :disabled="commandDisabledReason !== true" @click="saveCommand">Save</menulist-item>
+                        <menulist-item alt="Ctrl+Shift+S" :disabled="commandDisabledReason !== true" @click="saveAs">Save As</menulist-item>
                         <menulist-split></menulist-split>
                         <menulist-item alt="Q" @click="exit">Exit</menulist-item>
                     </menulist>
@@ -19,16 +19,20 @@
                 <template v-slot>View</template>
                 <template v-slot:pop>
                     <menulist>
-                        <menulist-item type="check" v-model="wordWrap">Word Wrap</menulist-item>
+                        <menulist-item type="check" :model-value="wordWrap" :disabled="commandDisabledReason !== true" @check="toggleWordWrap">Word Wrap</menulist-item>
                         <menulist-split></menulist-split>
                         <!-- 桌面程序更新检测 -->
                         <menulist-item alt="Ctrl+U" :disabled="checkingUpdate" @click="checkUpdates()">Check for Updates</menulist-item>
+                        <menulist-item :disabled="commandDisabledReason !== true" @click="aiAccess">AI Access</menulist-item>
                         <menulist-item @click="about">About</menulist-item>
                     </menulist>
                 </template>
             </menu-item>
         </menu>
-        <text type="multi" :disabled="installingUpdate || closing" :wrap="wordWrap" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" v-model:selection-start="selectionStart" v-model:selection-end="selectionEnd" @input="onInput" @keydown.ctrl.s="save"></text>
+        <text type="multi" :disabled="installingUpdate || closing || openingFiles" :wrap="wordWrap" style="flex: 1; border-width: .5px 0 0 0;" v-model="text" v-model:selection-start="selectionStart" v-model:selection-end="selectionEnd" @input="onInput"></text>
+    </layout>
+    <!-- 状态栏置于 Form 页脚，缩放握柄由框架预留空间。 -->
+    <template v-slot:footer>
         <statusbar separator="true">
             <statusbar-item :grow="true" :type="documentStatusType">{{documentStatus}}</statusbar-item>
             <template v-slot:right>
@@ -39,5 +43,5 @@
                 <statusbar-item>{{lineEnding}} · UTF-8</statusbar-item>
             </template>
         </statusbar>
-    </layout>
+    </template>
 </form>

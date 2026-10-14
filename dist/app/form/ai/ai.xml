@@ -1,0 +1,18 @@
+<form title="AI Access" :width="width" :height="height" min-width="300" min-height="200" padding="10" direction="v" min="false" max="false">
+    <flow direction="v" style="flex: 1;">
+        <layout direction="v" gutter="10">
+            <!-- 默认输出可分享的接入说明，不包含临时凭据。 -->
+            <label>Copy this guide to your AI client to use Notepad commands.</label>
+            <label>{{webMcpStatus}}</label>
+            <text :model-value="guide" readonly type="multi" dir="ltr" style="height: 160px;"></text>
+            <!-- 用户主动导出当前连接设置，stdio 和 CLI 无需此令牌。 -->
+            <layout v-if="native" direction="v" gutter="10">
+                <layout gutter="10" align-v="center" wrap>
+                    <button @click="showConnection">Show HTTP connection settings</button>
+                    <label>Keep the token private.</label>
+                </layout>
+                <text v-if="connection" :model-value="connection" readonly type="multi" dir="ltr" style="height: 100px;"></text>
+            </layout>
+        </layout>
+    </flow>
+</form>

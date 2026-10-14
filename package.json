@@ -16,6 +16,8 @@
   "scripts": {
     "build": "tsc && clickgo --app ./dist/app",
     "check": "tsc --noEmit --pretty false",
+    "test": "node dist/abox/test/text.mjs && node --experimental-vm-modules dist/abox/test/commands.mjs && node --experimental-vm-modules dist/abox/test/close.mjs && node --experimental-vm-modules dist/abox/test/open-file.mjs && node --experimental-vm-modules dist/abox/test/native-open-file.mjs",
+    "test:mcp": "clickgo --run ./dist/abox/test/mcp-desktop.mjs",
     "sass": "sass --watch dist/:dist/ --style compressed --no-source-map"
   },
   "build": {
@@ -43,32 +45,72 @@
     },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["x64", "arm64"] },
-        { "target": "deb", "arch": ["x64", "arm64"] },
-        { "target": "rpm", "arch": ["x64", "arm64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "./doc/logo.png",
       "category": "Utility",
       "syncDesktopName": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "./doc/logo.png",
+      "category": "public.app-category.utilities"
     },
     "files": [
       "dist/**/*",
       "doc/logo.png",
       "!dist/app/**/*",
       "!dist/*.ts",
-      "!dist/*.scss"
+      "!dist/*.scss",
+      "!dist/abox/test/**/*",
+      "!**/AGENTS.md"
     ],
     "directories": {
       "output": "build"
     }
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
     "@types/node": "^26.5.1",
-    "clickgo": "^6.1.4",
+    "clickgo": "^7.2.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "clickgo-native": "^2.0.7",
-    "electron-updater": "^6.8.9"
+    "clickgo-native": "^3.2.0"
   }
 }
