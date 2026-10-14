@@ -442,7 +442,11 @@ export default class extends clickgo.form.AbstractForm {
         }
     }
     async about() {
-        await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');
+        const app = clickgo.task.get(this);
+        if (app === null) {
+            return;
+        }
+        await clickgo.form.dialog(this, clickgo.tool.escapeHTML(`${app.name} ${app.version}`));
     }
     _continueOpenFiles() {
         if (!clickgo.isNative()) {

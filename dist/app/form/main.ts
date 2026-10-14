@@ -610,8 +610,16 @@ export default class extends clickgo.form.AbstractForm {
         }
     }
 
+    /**
+     * --- 显示当前应用包配置中的名称和版本 ---
+     * @returns 对话框关闭；任务已退出时不显示
+     */
     public async about(): Promise<void> {
-        await clickgo.form.dialog(this, 'ClickGo Notepad 2.0.0');
+        const app = clickgo.task.get(this);
+        if (app === null) {
+            return;
+        }
+        await clickgo.form.dialog(this, clickgo.tool.escapeHTML(`${app.name} ${app.version}`));
     }
 
     /**

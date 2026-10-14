@@ -1,6 +1,6 @@
 {
   "name": "clickgo-notepad",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "A lightweight text editor for web and desktop, primarily showcasing the ClickGo framework series.",
   "type": "module",
   "keywords": [
