@@ -1,5 +1,6 @@
 // Run after TypeScript compilation: node --experimental-vm-modules dist/abox/test/open-file.mjs
 import assert from 'node:assert/strict';
+import * as encodingApi from './encoding-api.mjs';
 import * as textApi from '../../app/lib/text.js';
 import { readFile } from 'node:fs/promises';
 import { SourceTextModule, SyntheticModule } from 'node:vm';
@@ -10,7 +11,7 @@ const contents = {
 };
 let discard = false;
 const dialogs = [];
-const clickgo = new SyntheticModule(['form', 'native', 'fs', 'isNative'], function() {
+const clickgo = new SyntheticModule(['form', 'native', 'fs', 'isNative', 'tool'], function() {
     this.setExport('form', {
         AbstractForm: class { constructor() { this.formId = 'form'; } },
         get: () => true,
@@ -26,9 +27,10 @@ const clickgo = new SyntheticModule(['form', 'native', 'fs', 'isNative'], functi
         invoke: async () => { throw new Error('Business must not pull files over custom IPC'); },
     });
     this.setExport('fs', {
-        getContent: async (_current, path) => contents[path] ?? null,
+        getContent: async (_current, path) => Object.hasOwn(contents, path) ? new Blob([contents[path]]) : null,
     });
     this.setExport('isNative', () => true);
+    this.setExport('tool', encodingApi);
 });
 const mod = new SourceTextModule(await readFile(new URL('../../app/form/main.js', import.meta.url), 'utf8'));
 const textModule = new SyntheticModule(Object.keys(textApi), function() {

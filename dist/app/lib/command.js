@@ -8,11 +8,15 @@ const revisionSchema = {
     'type': 'integer', 'minimum': 0,
     'description': 'Revision returned by document.read. Read again if the document has changed.',
 };
+const encodingSchema = {
+    'type': 'string', 'enum': ['utf-8', 'utf-16le', 'utf-16be', 'gb18030'],
+};
 function state(form) {
     return {
         'file': form.file, 'revision': form.revision, 'unsaved': form.nosave,
         'length': form.text.length, 'selectionStart': form.selectionStart,
         'selectionEnd': form.selectionEnd, 'wordWrap': form.wordWrap,
+        'encoding': form.encoding, 'bom': form.bom,
     };
 }
 function checkRevision(form, revision) {
@@ -77,9 +81,9 @@ export function register(form) {
         }),
         clickgo.command.register(form, {
             'name': 'document.open', 'title': 'Open document',
-            'description': 'Open one local UTF-8 file. Omit path to ask the user to choose. Asks about unsaved changes before replacing the current document.',
+            'description': 'Open or reopen one local text file. Omit encoding for BOM/strict UTF-8 detection; otherwise use the specified encoding. Asks about unsaved changes before replacing the document. Omit path to choose a file.',
             'inputSchema': {
-                'type': 'object', 'properties': { 'expectedRevision': revisionSchema, 'path': pathSchema },
+                'type': 'object', 'properties': { 'expectedRevision': revisionSchema, 'path': pathSchema, 'encoding': encodingSchema },
                 'required': ['expectedRevision'], 'additionalProperties': false,
             },
             'exposed': true, 'enabled': nativeEnabled, 'permissions': ['root'],
@@ -89,7 +93,7 @@ export function register(form) {
                 if (conflict !== null) {
                     return conflict;
                 }
-                if (!await form.openDocument(args['path'], context.signal)) {
+                if (!await form.openDocument(args['path'], context.signal, args['encoding'])) {
                     return clickgo.command.failure('not-completed', 'The file was not opened. Check the path or complete the user confirmation.');
                 }
                 return clickgo.command.success(state(form));
@@ -97,7 +101,7 @@ export function register(form) {
         }),
         clickgo.command.register(form, {
             'name': 'document.save', 'title': 'Save document',
-            'description': 'Write the current document to its file as UTF-8. For an unnamed document, asks the user to choose a path. Does not save a stale revision.',
+            'description': 'Write the current document using its encoding and BOM setting. For an unnamed document, asks the user to choose a path. Does not save a stale revision.',
             'inputSchema': {
                 'type': 'object', 'properties': { 'expectedRevision': revisionSchema },
                 'required': ['expectedRevision'], 'additionalProperties': false,
@@ -117,7 +121,7 @@ export function register(form) {
         }),
         clickgo.command.register(form, {
             'name': 'document.saveAs', 'title': 'Save document as',
-            'description': 'Save the current document as UTF-8 at a local path, overwriting that file if it exists. Omit path to show the save dialog. Use only a destination authorized by the user.',
+            'description': 'Save the current document using its encoding and BOM setting at a local path, overwriting that file if it exists. Omit path to show the save dialog. Use only a destination authorized by the user.',
             'inputSchema': {
                 'type': 'object', 'properties': { 'expectedRevision': revisionSchema, 'path': pathSchema },
                 'required': ['expectedRevision'], 'additionalProperties': false,
@@ -131,6 +135,28 @@ export function register(form) {
                 }
                 if (!await form.saveDocumentAs(args['path'], context.signal)) {
                     return clickgo.command.failure('not-completed', 'The current content was not saved. The operation was cancelled, writing failed or newer edits remain unsaved.');
+                }
+                return clickgo.command.success(state(form));
+            },
+        }),
+        clickgo.command.register(form, {
+            'name': 'document.encoding', 'title': 'Set document encoding',
+            'description': 'Change the encoding and BOM for the next save without writing to disk. Marks a changed setting unsaved. GB18030 requires bom=false. Use document.open with encoding to reinterpret existing file bytes.',
+            'inputSchema': {
+                'type': 'object', 'properties': {
+                    'expectedRevision': revisionSchema, 'encoding': encodingSchema, 'bom': { 'type': 'boolean' },
+                },
+                'required': ['expectedRevision', 'encoding', 'bom'], 'additionalProperties': false,
+            },
+            'exposed': true, 'enabled': enabled,
+            'annotations': { 'readOnlyHint': false, 'destructiveHint': false, 'openWorldHint': false },
+            'execute': async (args) => {
+                const conflict = checkRevision(form, args['expectedRevision']);
+                if (conflict !== null) {
+                    return conflict;
+                }
+                if (!await form.setEncoding(args['encoding'], args['bom'])) {
+                    return clickgo.command.failure('invalid-encoding', 'The document cannot be represented with these encoding settings.');
                 }
                 return clickgo.command.success(state(form));
             },

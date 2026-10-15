@@ -1,5 +1,6 @@
 import * as clickgo from 'clickgo';
 import aiFrm from './ai/ai';
+import encodingFrm from './encoding/encoding';
 import * as lCommand from '../lib/command';
 const fileFilters = [
     {
@@ -14,6 +15,18 @@ const fileFilters = [
 export default class extends clickgo.form.AbstractForm {
     title = 'New file - ClickGo Notepad';
     access = { 'openFiles': [] };
+    encoding = 'utf-8';
+    bom = false;
+    get encodingLabel() {
+        if (this.encoding === 'utf-8') {
+            return this.bom ? 'UTF-8 BOM' : 'UTF-8';
+        }
+        if (this.encoding === 'gb18030') {
+            return 'GB18030';
+        }
+        const label = this.encoding === 'utf-16le' ? 'UTF-16 LE' : 'UTF-16 BE';
+        return this.bom ? label : `${label} (no BOM)`;
+    }
     nosave = false;
     file = '';
     text = '';
@@ -270,6 +283,8 @@ export default class extends clickgo.form.AbstractForm {
             }
             this.nosave = false;
             this.file = '';
+            this.encoding = 'utf-8';
+            this.bom = false;
             this.text = '';
             this._observedText = '';
             this.selectionStart = 0;
@@ -286,7 +301,7 @@ export default class extends clickgo.form.AbstractForm {
     open() {
         return clickgo.command.execute(this, 'document.open', { 'expectedRevision': this.revision });
     }
-    async openDocument(path, signal) {
+    async openDocument(path, signal, encoding) {
         if (this.commandDisabledReason !== true || signal?.aborted) {
             return false;
         }
@@ -299,7 +314,7 @@ export default class extends clickgo.form.AbstractForm {
             if (!path || signal?.aborted) {
                 return false;
             }
-            return await this._openFile(path, signal);
+            return await this._openFile(path, signal, encoding);
         }
         finally {
             this.openingFiles = false;
@@ -370,11 +385,18 @@ export default class extends clickgo.form.AbstractForm {
     }
     async _writeDocument(path, signal) {
         const text = this.text;
+        const encoding = this.encoding;
+        const bom = this.bom;
         if (signal?.aborted) {
             return false;
         }
+        const bytes = clickgo.tool.encodeText(text, { 'encoding': encoding, 'bom': bom });
+        if (bytes === false) {
+            await clickgo.form.dialog(this, 'The text cannot be saved without losing characters. Choose another encoding, such as UTF-8.');
+            return false;
+        }
         try {
-            const saved = await clickgo.fs.putContent(this, `/storage${path}`, text, { 'encoding': 'utf8' });
+            const saved = await clickgo.fs.putContent(this, `/storage${path}`, new Blob([bytes]));
             if (!saved) {
                 await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
                 return false;
@@ -389,7 +411,7 @@ export default class extends clickgo.form.AbstractForm {
         }
         this.file = path;
         this.title = `${path.slice(path.lastIndexOf('/') + 1)} - ClickGo Notepad`;
-        this.nosave = this.text !== text;
+        this.nosave = this.text !== text || this.encoding !== encoding || this.bom !== bom;
         return !this.nosave;
     }
     async aiAccess() {
@@ -441,6 +463,66 @@ export default class extends clickgo.form.AbstractForm {
             }
         }
     }
+    async encodingSettings() {
+        if (this.commandDisabledReason !== true) {
+            return;
+        }
+        this.openingFiles = true;
+        try {
+            const choice = await this._chooseEncoding('manage');
+            if (choice === null) {
+                return;
+            }
+            this.openingFiles = false;
+            if (choice.action === 'reopen') {
+                await clickgo.command.execute(this, 'document.open', {
+                    'expectedRevision': this.revision, 'path': this.file, 'encoding': choice.encoding,
+                });
+            }
+            else {
+                await clickgo.command.execute(this, 'document.encoding', {
+                    'expectedRevision': this.revision, 'encoding': choice.encoding, 'bom': choice.bom,
+                });
+            }
+        }
+        finally {
+            this.openingFiles = false;
+            this._continueOpenFiles();
+        }
+    }
+    async setEncoding(encoding, bom) {
+        if (this.commandDisabledReason !== true) {
+            return false;
+        }
+        if (encoding === this.encoding && bom === this.bom) {
+            return true;
+        }
+        if (clickgo.tool.encodeText(this.text, { 'encoding': encoding, 'bom': bom }) === false) {
+            await clickgo.form.dialog(this, 'The text cannot be represented in this encoding. The current encoding has been kept.');
+            return false;
+        }
+        this.encoding = encoding;
+        this.bom = bom;
+        ++this.revision;
+        this.nosave = true;
+        return true;
+    }
+    async _chooseEncoding(mode) {
+        this.loading = true;
+        let form;
+        try {
+            form = await clickgo.form.create(this, encodingFrm, {
+                'encoding': mode === 'open' ? 'gb18030' : this.encoding,
+                'bom': mode === 'open' ? false : this.bom,
+                'mode': mode, 'reopen': !!this.file,
+            });
+        }
+        finally {
+            this.loading = false;
+        }
+        await form.showDialog();
+        return form.result;
+    }
     async about() {
         const app = clickgo.task.get(this);
         if (app === null) {
@@ -473,18 +555,29 @@ export default class extends clickgo.form.AbstractForm {
         }
         return action === 'Discard';
     }
-    async _openFile(file, signal) {
+    async _openFile(file, signal, encoding) {
         if (this.installingUpdate || this.closing || signal?.aborted) {
             return false;
         }
         if (!await this._confirmOpenFile('opening another file', signal) || signal?.aborted) {
             return false;
         }
-        const content = await clickgo.fs.getContent(this, '/storage' + file, {
-            'encoding': 'utf8',
-        });
-        if (content === null) {
+        const content = await clickgo.fs.getContent(this, '/storage' + file);
+        if (content === null || typeof content === 'string') {
             await clickgo.form.dialog(this, 'Unable to open the document. Please check that the file is still available.');
+            return false;
+        }
+        const bytes = await content.arrayBuffer();
+        let decoded = clickgo.tool.decodeText(bytes, encoding);
+        if (decoded === false && encoding === undefined && !signal?.aborted) {
+            const choice = await this._chooseEncoding('open');
+            if (choice === null || signal?.aborted) {
+                return false;
+            }
+            decoded = clickgo.tool.decodeText(bytes, choice.encoding);
+        }
+        if (decoded === false) {
+            await clickgo.form.dialog(this, 'The file is not valid in the selected encoding. The current document has been kept.');
             return false;
         }
         if (this.installingUpdate || this.closing || signal?.aborted) {
@@ -493,8 +586,10 @@ export default class extends clickgo.form.AbstractForm {
         ++this.revision;
         this.nosave = false;
         this.file = file;
-        this.text = content;
-        this._observedText = content;
+        this.encoding = decoded.encoding;
+        this.bom = decoded.bom;
+        this.text = decoded.text;
+        this._observedText = decoded.text;
         this.selectionStart = 0;
         this.selectionEnd = 0;
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';

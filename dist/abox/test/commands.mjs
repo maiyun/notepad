@@ -1,5 +1,6 @@
 // Run after TypeScript compilation: node --experimental-vm-modules dist/abox/test/commands.mjs
 import assert from 'node:assert/strict';
+import * as encodingApi from './encoding-api.mjs';
 import * as textApi from '../../app/lib/text.js';
 import { readFile } from 'node:fs/promises';
 import { SourceTextModule, SyntheticModule } from 'node:vm';
@@ -44,8 +45,8 @@ const clickgo = new SyntheticModule(['form', 'native', 'fs', 'command', 'isNativ
         downloadUpdate: async () => ({ status: 'downloaded', currentVersion: '2.0.0', version: '2.1.0' }),
         installUpdate: async () => { ++installCalls; return installResult; },
         onUpdateState: (_form, handler) => { updateHandler = handler; }, on() {} });
-    this.setExport('tool', { escapeHTML: text => text });
-    this.setExport('fs', { putContent: (...args) => write(...args), getContent: async (_form, path) => contents[path] ?? null });
+    this.setExport('tool', { ...encodingApi, escapeHTML: text => text });
+    this.setExport('fs', { putContent: (...args) => write(...args), getContent: async (_form, path) => Object.hasOwn(contents, path) ? new Blob([contents[path]]) : null });
     this.setExport('command', command);
     this.setExport('isNative', () => nativeEnvironment);
 });
@@ -60,7 +61,7 @@ await main.link(name => name === 'clickgo' ? clickgo : name.endsWith('/text') ? 
 await main.evaluate();
 const form = new main.namespace.default();
 form.onMounted();
-assert.equal(definitions.size, 8);
+assert.equal(definitions.size, 9);
 const run = (name, args) => command.execute(form, name, args);
 
 let result = await run('document.read');

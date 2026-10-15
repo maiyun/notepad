@@ -1,5 +1,6 @@
 import * as clickgo from 'clickgo';
 import aiFrm from './ai/ai';
+import encodingFrm, { type IEncodingChoice } from './encoding/encoding';
 import * as lCommand from '../lib/command';
 
 /** --- 文本文件优先显示常用格式，同时允许用户处理其他纯文本文件 --- */
@@ -20,6 +21,24 @@ export default class extends clickgo.form.AbstractForm {
 
     /** --- 未处理的文件请求，不参与界面响应式状态 --- */
     public access = { 'openFiles': [] as string[] };
+
+    /** --- 当前正文的解码及待保存编码，新建默认 UTF-8 --- */
+    public encoding: clickgo.tool.TTextEncoding = 'utf-8';
+
+    /** --- 保存时保留文件头 BOM，GB18030 始终为 false --- */
+    public bom = false;
+
+    /** --- 状态栏显示当前实际采用的编码与 BOM --- */
+    public get encodingLabel(): string {
+        if (this.encoding === 'utf-8') {
+            return this.bom ? 'UTF-8 BOM' : 'UTF-8';
+        }
+        if (this.encoding === 'gb18030') {
+            return 'GB18030';
+        }
+        const label = this.encoding === 'utf-16le' ? 'UTF-16 LE' : 'UTF-16 BE';
+        return this.bom ? label : `${label} (no BOM)`;
+    }
 
     /** --- 当前是否存在未保存的编辑，空白新文档初始为未修改 --- */
     public nosave = false;
@@ -375,6 +394,8 @@ export default class extends clickgo.form.AbstractForm {
             }
             this.nosave = false;
             this.file = '';
+            this.encoding = 'utf-8';
+            this.bom = false;
             this.text = '';
             this._observedText = '';
             this.selectionStart = 0;
@@ -401,9 +422,10 @@ export default class extends clickgo.form.AbstractForm {
      * --- 打开给定路径；省略路径时让用户选择 ---
      * @param path 不含 /storage/ 的绝对路径
      * @param signal 代理取消信号
+     * @param encoding 显式解码；省略时按 BOM/严格 UTF-8 识别
      * @returns 是否完成打开
      */
-    public async openDocument(path?: string, signal?: AbortSignal): Promise<boolean> {
+    public async openDocument(path?: string, signal?: AbortSignal, encoding?: clickgo.tool.TTextEncoding): Promise<boolean> {
         if (this.commandDisabledReason !== true || signal?.aborted) {
             return false;
         }
@@ -416,7 +438,7 @@ export default class extends clickgo.form.AbstractForm {
             if (!path || signal?.aborted) {
                 return false;
             }
-            return await this._openFile(path, signal);
+            return await this._openFile(path, signal, encoding);
         }
         finally {
             this.openingFiles = false;
@@ -522,11 +544,18 @@ export default class extends clickgo.form.AbstractForm {
      */
     private async _writeDocument(path: string, signal?: AbortSignal): Promise<boolean> {
         const text = this.text;
+        const encoding = this.encoding;
+        const bom = this.bom;
         if (signal?.aborted) {
             return false;
         }
+        const bytes = clickgo.tool.encodeText(text, { 'encoding': encoding, 'bom': bom });
+        if (bytes === false) {
+            await clickgo.form.dialog(this, 'The text cannot be saved without losing characters. Choose another encoding, such as UTF-8.');
+            return false;
+        }
         try {
-            const saved = await clickgo.fs.putContent(this, `/storage${path}`, text, { 'encoding': 'utf8' });
+            const saved = await clickgo.fs.putContent(this, `/storage${path}`, new Blob([bytes]));
             if (!saved) {
                 await clickgo.form.dialog(this, 'Unable to save the document. Please try again.');
                 return false;
@@ -543,7 +572,7 @@ export default class extends clickgo.form.AbstractForm {
         this.file = path;
         this.title = `${path.slice(path.lastIndexOf('/') + 1)} - ClickGo Notepad`;
         // --- 已发生的写入不回滚，写入期间新增的编辑仍保留未保存状态 ---
-        this.nosave = this.text !== text;
+        this.nosave = this.text !== text || this.encoding !== encoding || this.bom !== bom;
         return !this.nosave;
     }
 
@@ -611,6 +640,84 @@ export default class extends clickgo.form.AbstractForm {
     }
 
     /**
+     * --- 选择重新打开或转换编码，忙碌期间暂存 Native 文件请求 ---
+     * @returns 操作完成或取消
+     */
+    public async encodingSettings(): Promise<void> {
+        if (this.commandDisabledReason !== true) {
+            return;
+        }
+        this.openingFiles = true;
+        try {
+            const choice = await this._chooseEncoding('manage');
+            if (choice === null) {
+                return;
+            }
+            this.openingFiles = false;
+            if (choice.action === 'reopen') {
+                await clickgo.command.execute(this, 'document.open', {
+                    'expectedRevision': this.revision, 'path': this.file, 'encoding': choice.encoding,
+                });
+            }
+            else {
+                await clickgo.command.execute(this, 'document.encoding', {
+                    'expectedRevision': this.revision, 'encoding': choice.encoding, 'bom': choice.bom,
+                });
+            }
+        }
+        finally {
+            this.openingFiles = false;
+            this._continueOpenFiles();
+        }
+    }
+
+    /**
+     * --- 更改待保存编码，不写文件；仅实际变更时标记未保存 ---
+     * @param encoding 目标编码
+     * @param bom 是否写入 BOM，GB18030 不支持
+     * @returns 是否接受转换；忙碌或无法无损编码时为 false
+     */
+    public async setEncoding(encoding: clickgo.tool.TTextEncoding, bom: boolean): Promise<boolean> {
+        if (this.commandDisabledReason !== true) {
+            return false;
+        }
+        if (encoding === this.encoding && bom === this.bom) {
+            return true;
+        }
+        if (clickgo.tool.encodeText(this.text, { 'encoding': encoding, 'bom': bom }) === false) {
+            await clickgo.form.dialog(this, 'The text cannot be represented in this encoding. The current encoding has been kept.');
+            return false;
+        }
+        this.encoding = encoding;
+        this.bom = bom;
+        ++this.revision;
+        this.nosave = true;
+        return true;
+    }
+
+    /**
+     * --- 使用原生模态窗体选择编码及操作 ---
+     * @param mode 打开解码或管理当前文档
+     * @returns 显式选择；取消为 null
+     */
+    private async _chooseEncoding(mode: 'open' | 'manage'): Promise<IEncodingChoice | null> {
+        this.loading = true;
+        let form: encodingFrm;
+        try {
+            form = await clickgo.form.create(this, encodingFrm, {
+                'encoding': mode === 'open' ? 'gb18030' : this.encoding,
+                'bom': mode === 'open' ? false : this.bom,
+                'mode': mode, 'reopen': !!this.file,
+            });
+        }
+        finally {
+            this.loading = false;
+        }
+        await form.showDialog();
+        return form.result;
+    }
+
+    /**
      * --- 显示当前应用包配置中的名称和版本 ---
      * @returns 对话框关闭；任务已退出时不显示
      */
@@ -663,20 +770,32 @@ export default class extends clickgo.form.AbstractForm {
      * --- 读取指定文件并替换当前文档 ---
      * @param file 不含 /storage/ 的文件路径
      * @param signal 代理取消信号
+     * @param encoding 显式解码；省略时识别 BOM/严格 UTF-8，失败后让用户选择
      * @returns 是否已完成打开
      */
-    private async _openFile(file: string, signal?: AbortSignal): Promise<boolean> {
+    private async _openFile(file: string, signal?: AbortSignal, encoding?: clickgo.tool.TTextEncoding): Promise<boolean> {
         if (this.installingUpdate || this.closing || signal?.aborted) {
             return false;
         }
         if (!await this._confirmOpenFile('opening another file', signal) || signal?.aborted) {
             return false;
         }
-        const content = await clickgo.fs.getContent(this, '/storage' + file, {
-            'encoding': 'utf8',
-        });
-        if (content === null) {
+        const content = await clickgo.fs.getContent(this, '/storage' + file);
+        if (content === null || typeof content === 'string') {
             await clickgo.form.dialog(this, 'Unable to open the document. Please check that the file is still available.');
+            return false;
+        }
+        const bytes = await content.arrayBuffer();
+        let decoded = clickgo.tool.decodeText(bytes, encoding);
+        if (decoded === false && encoding === undefined && !signal?.aborted) {
+            const choice = await this._chooseEncoding('open');
+            if (choice === null || signal?.aborted) {
+                return false;
+            }
+            decoded = clickgo.tool.decodeText(bytes, choice.encoding);
+        }
+        if (decoded === false) {
+            await clickgo.form.dialog(this, 'The file is not valid in the selected encoding. The current document has been kept.');
             return false;
         }
         if (this.installingUpdate || this.closing || signal?.aborted) {
@@ -685,8 +804,10 @@ export default class extends clickgo.form.AbstractForm {
         ++this.revision;
         this.nosave = false;
         this.file = file;
-        this.text = content;
-        this._observedText = content;
+        this.encoding = decoded.encoding;
+        this.bom = decoded.bom;
+        this.text = decoded.text;
+        this._observedText = decoded.text;
         this.selectionStart = 0;
         this.selectionEnd = 0;
         this.title = this.file.slice(this.file.lastIndexOf('/') + 1) + ' - ClickGo Notepad';

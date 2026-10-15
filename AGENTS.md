@@ -26,8 +26,14 @@
 
 ## 文件打开
 
-- `dist/index.ts` 只启用 openFiles/singleInstance，不转发业务事件；主 Form 的 onNativeOpenFiles 接收框架全局事件，在 access 暂存忙碌期间的文件请求。Notepad 每次请求只处理首个真实文件，不限扩展名，内容按 UTF-8 读取；来源由框架 info.source 区分。
+- `dist/index.ts` 只启用 openFiles/singleInstance，不转发业务事件；主 Form 的 onNativeOpenFiles 接收框架全局事件，在 access 暂存忙碌期间的文件请求。Notepad 每次请求只处理首个真实文件，不限扩展名，内容通过框架 tool.decodeText 按 BOM/严格 UTF-8 识别，失败时让用户显式选择；来源由框架 info.source 区分。
 - 菜单和 Native 文件请求共用 `_openFile()`；替换未保存文档前必须完成保存、放弃或取消流程。
+
+## 文本编码
+
+- 编解码使用 ClickGo tool.decodeText/encodeText；契约以框架类型为准。Form 保留 encoding/bom；新建默认 UTF-8 无 BOM，打开提交成功后才更新正文和编码，保存保持当前编码/BOM及正文换行。
+- 状态栏编码项打开 form/encoding；Reopen 共用 document.open 并处理未保存修改，Convert 共用 document.encoding，仅实际变更时递增 revision 并标记未保存。无效字节、取消及编码失败保留原文档，编码失败不写盘。
+- document.read 返回 encoding/bom；打开命令可指定 encoding，保存命令不隐式转换。乱码与取消/失败回归在 abox/test/encoding.mjs，真实字节和状态栏操作在 test:mcp。
 
 ## AI 命令接入
 

@@ -28,7 +28,7 @@ if (!commandProcess) {
     // Use the installed local build while keeping the production CDN import unchanged.
     app.once('ready', () => session.defaultSession.protocol.handle('https', request => {
         const url = new URL(request.url);
-        const prefix = '/npm/clickgo@7.2.0/';
+        const prefix = '/npm/clickgo@7.3.1/';
         if (url.hostname === 'cdn.jsdelivr.net' && url.pathname.startsWith(prefix)) {
             const file = new URL('../../../node_modules/clickgo/' + url.pathname.slice(prefix.length), import.meta.url);
             return net.fetch(file.href);
@@ -88,11 +88,11 @@ if (!commandProcess) {
             const discovered = await call(client, 'clickgo_list_apps', {});
             assert.equal(discovered.ok, true);
             const taskId = discovered.data.find(item => item.name === 'ClickGo Notepad').id;
-            const updateState = await page.executeJavaScript(`import('https://cdn.jsdelivr.net/npm/clickgo@7.2.0/dist/index.js').then(module => module.native.getUpdateState(${JSON.stringify(taskId)}))`);
+            const updateState = await page.executeJavaScript(`import('https://cdn.jsdelivr.net/npm/clickgo@7.3.1/dist/index.js').then(module => module.native.getUpdateState(${JSON.stringify(taskId)}))`);
             assert.equal(updateState.status, 'disabled');
             assert.equal(updateState.reason, 'development', 'the installed Native update API is enabled and available');
             const commands = await call(client, 'clickgo_list_commands', { taskId });
-            assert.equal(commands.data.length, 8);
+            assert.equal(commands.data.length, 9);
             const execute = (name, args = {}) => call(client, 'clickgo_execute_command', { taskId, name, args });
             BrowserWindow.getAllWindows()[0].show();
             BrowserWindow.getAllWindows()[0].focus();
@@ -156,6 +156,67 @@ if (!commandProcess) {
             assert.equal(result.data.revision, beforeUpdate.revision, 'unchanged DOM input does not count as an edit');
             assert.equal(result.data.unsaved, false);
             assert.ok((await page.executeJavaScript('document.body.textContent')).includes('Ready'));
+            // The entire flat item is interactive, with no nested ClickGo button or extra rounded border.
+            const statusAppearance = await page.executeJavaScript(`(() => {
+                const item = [...document.querySelectorAll('[data-cg-control="statusbar-item"]')].find(item => item.textContent.trim() === 'UTF-8');
+                const style = getComputedStyle(item);
+                return { nested: !!item.querySelector('[data-cg-control="button"]'), role: item.getAttribute('role'), radius: style.borderRadius, height: item.getBoundingClientRect().height, barHeight: item.closest('[data-cg-control="statusbar"]').getBoundingClientRect().height };
+            })()`);
+            assert.equal(statusAppearance.nested, false);
+            assert.equal(statusAppearance.role, 'button');
+            assert.equal(statusAppearance.radius, '0px');
+            assert.ok(Math.abs(statusAppearance.height - statusAppearance.barHeight) <= 1);
+            const flatStatusImage = await page.capturePage();
+            await writeFile(join(process.env['NOTEPAD_MCP_TEST_DIR'], 'flat-statusbar.png'), flatStatusImage.toPNG());
+            // A real status-bar click opens the encoding dialog; Cancel must keep pristine state.
+            await clickControl('statusbar-item', 'UTF-8');
+            const disabledStatus = await page.executeJavaScript(`(() => {
+                const item = [...document.querySelectorAll('[data-cg-control="statusbar-item"]')].find(item => item.textContent.trim() === 'UTF-8');
+                return { disabled: item.getAttribute('aria-disabled'), tabindex: item.getAttribute('tabindex') };
+            })()`);
+            assert.equal(disabledStatus.disabled, 'true', 'the pending encoding operation disables the whole item');
+            assert.equal(disabledStatus.tabindex, null);
+            await clickControl('button', 'Cancel');
+            result = await execute('document.read');
+            assert.equal(result.data.unsaved, false);
+            assert.equal(result.data.revision, beforeUpdate.revision);
+            // Dispatch keyboard events to the mounted DOM; OS window focus is environment-dependent in this harness.
+            let statusFocused = false;
+            for (let attempt = 0; attempt < 100; ++attempt) {
+                statusFocused = await page.executeJavaScript(`(() => {
+                    const item = [...document.querySelectorAll('[data-cg-control="statusbar-item"]')].find(item => item.textContent.trim() === 'UTF-8');
+                    if (!item || item.getAttribute('tabindex') !== '0') { return false; }
+                    item.focus(); return document.activeElement === item;
+                })()`);
+                if (statusFocused) { break; }
+                await new Promise(resolve => setTimeout(resolve, 30));
+            }
+            assert.equal(statusFocused, true);
+            await page.executeJavaScript(`(() => {
+                const item = [...document.querySelectorAll('[data-cg-control="statusbar-item"]')].find(item => item.textContent.trim() === 'UTF-8');
+                item.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+                item.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true, cancelable: true }));
+            })()`);
+            await clickControl('button', 'Cancel');
+            BrowserWindow.getAllWindows()[0].setContentSize(360, 240);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await clickControl('statusbar-item', 'UTF-8');
+            const encodingImage = await page.capturePage();
+            await writeFile(join(process.env['NOTEPAD_MCP_TEST_DIR'], 'encoding-dialog.png'), encodingImage.toPNG());
+            await clickControl('check', 'Include BOM when saving');
+            await clickControl('button', 'Convert');
+            for (let attempt = 0; attempt < 100; ++attempt) {
+                result = await execute('document.read');
+                if (result.data.bom) { break; }
+                await new Promise(resolve => setTimeout(resolve, 30));
+            }
+            assert.equal(result.data.bom, true);
+            assert.equal(result.data.unsaved, true);
+            assert.ok((await page.executeJavaScript('document.body.textContent')).includes('UTF-8 BOM'));
+            assert.equal((await execute('document.new', { expectedRevision: result.data.revision })).ok, true);
+            result = await execute('document.read');
+            BrowserWindow.getAllWindows()[0].setContentSize(500, 400);
+            await new Promise(resolve => setTimeout(resolve, 200));
             let revision = result.data.revision;
             result = await execute('document.replace', { expectedRevision: revision, text: 'Hello AI\n你好 🌍' });
             assert.equal(result.ok, true);
@@ -215,6 +276,49 @@ if (!commandProcess) {
             assert.equal(result.ok, true);
             revision = result.data.revision;
             assert.equal((await execute('document.read')).data.text, '{"source":"MCP"}');
+            // Real Native filesystem bytes + packed App + public encoding commands.
+            const legacy = join(process.env['NOTEPAD_MCP_TEST_DIR'], 'gb18030.txt');
+            await writeFile(legacy, Buffer.from([0xd6, 0xd0, 0xce, 0xc4]));
+            const openingLegacy = execute('document.open', { expectedRevision: revision, path: legacy });
+            await clickControl('button', 'Open');
+            result = await openingLegacy;
+            assert.equal(result.ok, true);
+            assert.equal(result.data.encoding, 'gb18030');
+            assert.equal((await execute('document.read')).data.text, '中文');
+            assert.ok((await page.executeJavaScript('document.body.textContent')).includes('GB18030'));
+            const legacyCopy = join(process.env['NOTEPAD_MCP_TEST_DIR'], 'gb-copy.txt');
+            result = await execute('document.saveAs', { expectedRevision: result.data.revision, path: legacyCopy });
+            assert.equal(result.ok, true);
+            assert.deepEqual([...await readFile(legacyCopy)], [0xd6, 0xd0, 0xce, 0xc4]);
+            result = await execute('document.encoding', { expectedRevision: result.data.revision, encoding: 'utf-16be', bom: true });
+            assert.equal(result.ok, true);
+            const utf16 = join(process.env['NOTEPAD_MCP_TEST_DIR'], 'utf16.txt');
+            result = await execute('document.saveAs', { expectedRevision: result.data.revision, path: utf16 });
+            assert.deepEqual([...await readFile(utf16)], [0xfe, 0xff, 0x4e, 0x2d, 0x65, 0x87]);
+            result = await execute('document.open', { expectedRevision: result.data.revision, path: utf16 });
+            assert.equal(result.ok, true);
+            assert.equal(result.data.encoding, 'utf-16be');
+            assert.equal(result.data.bom, true);
+            assert.equal((await execute('document.read')).data.text, '中文');
+            assert.ok((await page.executeJavaScript('document.body.textContent')).includes('UTF-16 BE'));
+            // Reopen uses the selected decoding on the actual changed file, at the minimum window size.
+            await writeFile(utf16, Buffer.from([0xfe, 0xff, 0x65, 0x87]));
+            BrowserWindow.getAllWindows()[0].setContentSize(360, 240);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await clickControl('statusbar-item', 'UTF-16 BE');
+            const reopenImage = await page.capturePage();
+            await writeFile(join(process.env['NOTEPAD_MCP_TEST_DIR'], 'encoding-reopen.png'), reopenImage.toPNG());
+            await clickControl('button', 'Reopen');
+            for (let attempt = 0; attempt < 100; ++attempt) {
+                result = await execute('document.read');
+                if (result.data.text === '文') { break; }
+                await new Promise(resolve => setTimeout(resolve, 30));
+            }
+            assert.equal(result.data.text, '文');
+            assert.equal(result.data.encoding, 'utf-16be');
+            assert.equal(result.data.unsaved, false);
+            BrowserWindow.getAllWindows()[0].setContentSize(500, 400);
+            await new Promise(resolve => setTimeout(resolve, 200));
             result = await execute('editor.wordWrap', { enabled: false });
             assert.equal(result.data.wordWrap, false);
             BrowserWindow.getAllWindows()[0].show();
@@ -253,7 +357,7 @@ if (!commandProcess) {
             }
             assert.equal(connection?.url, info.url);
             assert.ok(connection?.headers.Authorization === `Bearer ${info.token}`, 'HTTP settings contain the current credential');
-            console.log('HTTP MCP, CLI, stdio, UTF-8 saving, shared UI editing and stale revision checks passed.');
+            console.log('HTTP MCP, CLI, stdio, encoding detection/conversion/reopening, lossless saving, shared UI editing and stale revision checks passed.');
             console.log(`Screenshot: ${join(process.env['NOTEPAD_MCP_TEST_DIR'], 'notepad.png')}`);
         }
         catch (error) {

@@ -1,0 +1,11 @@
+<form title="Text Encoding" width="340" height="auto" min="false" max="false" resize="false" direction="v">
+    <dialog :buttons="buttons" @select="select" direction="v" width="340">
+        <layout direction="v" gutter="10">
+            <!-- 不猜测传统编码，由用户指定解码方式。 -->
+            <label v-if="mode === 'open'">The file is not valid UTF-8 or supported BOM text. Choose its encoding.</label>
+            <label v-else>Reopen reads the file again. Convert changes the encoding used by the next save.</label>
+            <select v-model="encoding" :data="encodings"></select>
+            <check v-if="mode === 'manage' && encoding[0] !== 'gb18030'" v-model="bom">Include BOM when saving</check>
+        </layout>
+    </dialog>
+</form>

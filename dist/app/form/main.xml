@@ -40,7 +40,8 @@
                 <statusbar-item>Ln {{cursorLine}}, Col {{cursorColumn}}</statusbar-item>
                 <statusbar-item>{{lineCount}} {{lineCount === 1 ? 'line' : 'lines'}}</statusbar-item>
                 <statusbar-item>{{characterCount}} {{characterCount === 1 ? 'char' : 'chars'}}</statusbar-item>
-                <statusbar-item>{{lineEnding}} · UTF-8</statusbar-item>
+                <statusbar-item>{{lineEnding}}</statusbar-item>
+                <statusbar-item clickable :disabled="commandDisabledReason !== true" @click="encodingSettings" tip="Change text encoding">{{encodingLabel}}</statusbar-item>
             </template>
         </statusbar>
     </template>
